@@ -1,0 +1,558 @@
+---
+title: "Lasso_WGCNA_SoftThreshold_16"
+author: 
+- name: "Computational Immunogenomics Core (CIG Core)"
+  affiliation: "Center for Systems Immunology, University of Pittsburgh"
+  email: "sis186@pitt.edu"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 3  # upto three depths of headings (specified by #, ## and ###)
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    number_sections: true  ## if you want number sections at each table header
+    theme: "default" # many options for theme, this one is my favorite.
+    highlight: tango  # specifies the syntax highlighting style
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+## Libraries
+suppressMessages({
+  library(openxlsx)
+  library(biomaRt)
+  library(stringr)
+  library(matrixStats)
+  library(pheatmap)
+  library(dplyr)
+  library(ggfortify)
+  library(org.Hs.eg.db)
+  library(WebGestaltR)
+  library(DESeq2)
+  library(apeglm)
+  library(EnhancedVolcano)
+  library('janitor') #use the function: row_to_names
+})
+library(ROCR) #AUC
+library(cvTools) #AUC
+library("RNAseqQC")
+library("ensembldb")
+library("dplyr")
+library("ggplot2")
+library("purrr")
+library("tidyr")
+library("tibble")
+library("magrittr")
+library(DEGreport)
+library(writexl)
+library("glmnet")
+library("caret")  # For cv.glmnet function
+## Sourcing
+source("/ix/cigcore/utils/code/de.heatmap.R")
+library(brglm)
+library(tximport)
+library(sleuth)
+library(dplyr)
+library(VennDiagram)
+library(AnnotationDbi)
+library(enrichplot)
+library(tidyverse)
+library(cowplot) #plot_grid
+library(glmnet)
+library(doParallel)
+registerDoParallel(cores = 4) 
+library(nestedcv)
+## Set paths
+proj_path <- "/ix/cigcore/proj/biswas"
+data_path <- file.path(proj_path, "data", "Ascherman_TotalRNA_07_20_2023")
+resPath <- gsub(pattern="data", replacement="result", data_path)
+experiment <- "3-28-Lasso_WGCNA"
+experimentPath <- file.path(resPath, experiment)
+dir.create(experimentPath, showWarnings = TRUE, recursive = TRUE)
+#metadata_path <- file.path(data_path, "metadata_remove_unpaired_low_align.csv")
+#dir.create(webgestalt_path, recursive=TRUE)
+metadata_path <- file.path(data_path, "all_metadata_remove_unpaired_low_align.csv") 
+file_path <- file.path(data_path, "TPM_ordered_variance.csv")
+```
+
+
+```{r count, include=FALSE, echo=FALSE}
+coldata <- read.csv(file.path(metadata_path), row.names = 1) #Metadata
+coldata$sample <- rownames(coldata)  # new variable:sample = rownames in 'coldata'
+#coldata <- coldata[ , c("sample", "treatment")]
+coldata$treatment <- ifelse(coldata$treatment == "Pre", 0, 1)
+coldata$treatment <- factor(coldata$treatment)
+coldata$age_group <- factor(coldata$age_group)
+TPM_ordered_variance <- read.csv(file.path(file_path), row.names = 1)
+```
+
+
+
+```{r, results = FALSE}
+# TPM_ordered_variance_plot <- t(TPM_ordered_variance)
+# qqnorm(t(tximport_TPM))
+# abline(0, 1, col = "red") #TPM --> Poisson distribution
+# 
+# qqnorm(TPM_ordered_variance_plot) # --> normal distribution
+# abline(0, 1, col = "red")
+```
+
+# Sample Metadata
+
+```{r metadata, echo=FALSE}
+sampleInfo <- coldata
+numSamples <- dim(sampleInfo)[1]
+sampleInfo$Sequence <- seq_len(nrow(sampleInfo))
+rownames(sampleInfo) <- NULL
+knitr::kable(sampleInfo)
+```
+
+# WGCNA result
+
+> Soft threshold = 16
+
+soft threshold = **16**
+	
+![](/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/4-1-2023-WGCNA_SoftThreshold_16/thumbnail_image.png){width=60%}.
+
+> Modules = 29
+
+**29** modules in total
+
+![](/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/3-25-2023-WGCNA/module_16.png){width=70%}.
+
+
+
+|  Positive modules | Spearman correlation (p-value) | 
+| ------------- |:-------------:|
+|  **lightgreen (152 genes)** | 0.14 (0.1)  | 
+
+
+|  Negative modules | Spearman correlation (p-value) | 
+| ------------- |:-------------:|
+|  **darkred (63 genes)** | -0.12 (0.2)  | 
+|  **midnightblue (303 genes)** | -0.1 (0.2) | 
+ 
+
+
+
+```{r, out.width = '70%'}
+knitr::include_graphics("/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/4-1-2023-WGCNA_SoftThreshold_16/heatmap_SoftThreshold_16.png")
+```
+
+
+```{r, echo=FALSE}
+#X: expression matrix
+expression_matrix <- as.matrix(TPM_ordered_variance)
+#Y: response variable 
+response_variable <- coldata$treatment
+response_variable <- as.factor(response_variable)
+```
+
+```{r, echo=FALSE}
+file_path_lightgreen <- "/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/3-25-2023-WGCNA/module_csv_SoftThreshold_16/lightgreen.csv"
+file_path_darkred <- "/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/3-25-2023-WGCNA/module_csv_SoftThreshold_16/darkred.csv"
+file_path_midnightblue <- "/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/3-25-2023-WGCNA/module_csv_SoftThreshold_16/midnightblue.csv"
+
+positive <- read.csv(file_path_lightgreen) #152
+negative_1 <- read.csv(file_path_darkred) #63
+negative_2 <- read.csv(file_path_midnightblue) #303
+
+positive_expression_matrix <- as.data.frame(expression_matrix[,positive$gene]) #lightgreen: 152
+negative_expression_matrix_1 <- as.data.frame(expression_matrix[,negative_1$gene]) #darkred: 63
+negative_expression_matrix_2 <- as.data.frame(expression_matrix[,negative_2$gene]) #midnightblue: 303
+```
+
+# Run LASSO on all 3 modules (total: 518 genes)
+
+* Alpha = 1
+
+* Nested cross validation
+
+     + outer loop method: leave-one-out
+     + inner loop method: leave-one-out
+
+```{r}
+combine_module <- merge(positive_expression_matrix, 
+                        negative_expression_matrix_1, 
+                        by = "row.names", 
+                        all = TRUE)
+rownames(combine_module) <- combine_module$Row.names
+combine_module <- combine_module[, -1]
+combine_module <- merge(combine_module, 
+                        negative_expression_matrix_2, 
+                        by = "row.names", 
+                        all = TRUE)
+rownames(combine_module) <- combine_module$Row.names
+combine_module <- combine_module[, -1]
+```
+
+```{r}
+  alpha <- 1
+  
+  set.seed(123)
+
+  
+  
+   n_outer_folds <- length(response_variable)  # LOOCV
+    n_inner_folds <- 23 # LOOCV
+    outer_folds <- lapply(1:length(response_variable), function(i) i)
+    
+    set.seed(123)
+    nested_cv_result <- nestcv.glmnet(
+      y = response_variable, 
+      x = combine_module, 
+      family = "binomial",
+      outer_method = "LOOCV", 
+      n_inner_folds = n_inner_folds,
+      outer_folds = outer_folds, 
+      alphaSet = 1,
+      finalCV = TRUE
+    )
+    #cv.glmnet: pass "standardize TRUE" 
+    
+    
+    # Get the lambda value, model and non-zero coefficients selected during cross-validation
+    best_lambda <- nested_cv_result$final_param["lambda"]
+    best_lambda_value <- as.numeric(best_lambda)
+    current_model <- nested_cv_result$final_fit
+    non_zero_coefficients <- rownames(nested_cv_result[["final_coef"]])[-1]
+  
+  cat("Tuned lambda value:\n", best_lambda_value, "\n")
+  current_model
+  cat("Non-zero Coefficients:\n", non_zero_coefficients, "\n")
+
+  gene <- non_zero_coefficients
+  
+
+```
+
+## List of genes with non-zero coefficients (5 Genes)
+
+```{r}
+
+ensemblID <- gene
+attributes <- c("ensembl_gene_id", "external_gene_name")
+ensemblMart <- useMart("ensembl", dataset="hsapiens_gene_ensembl")
+external_gene_names <- getBM(attributes = attributes, filters = "ensembl_gene_id", values = gene_positive, mart = ensemblMart)
+
+external_gene_names$external_gene_name <- ifelse(external_gene_names$external_gene_name == "", 
+                                                     external_gene_names$ensembl_gene_id, 
+                                                   external_gene_names$external_gene_name)
+
+
+knitr::kable(external_gene_names, "html") %>%
+  kableExtra::kable_styling(full_width = FALSE)
+
+```
+
+## AUC
+```{r}
+library(pROC)
+proc <- nested_cv_result$roc
+auc <- proc$auc
+plot.roc(
+  proc,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Nested-CV Lasso model (5 genes) in positive module (518 genes)\n Area under the curve (AUC):", round(auc, digits = 2))
+)
+
+```
+
+## Accuracy
+```{r}
+nested_cv_result[["summary"]][["table"]]
+nested_cv_result[["summary"]][["metrics"]]
+```
+
+
+
+# Heatmap (Pre-treatment vs Post-treatment)
+
+```{r}
+library(RColorBrewer)
+selected_genes <- gene_final$ensembl_gene_id
+zMatrix <- t(TPM_ordered_variance)
+gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
+gene_zMatrix <- as.data.frame(gene_zMatrix)
+
+breaksList = seq(-3, 3, by = 0.06)
+
+sorted <- coldata[order(coldata$treatment == '1', coldata$treatment), ]
+cluster_treatment <- as.data.frame(t(sorted[, c(1:4)]))
+
+gene_zMatrix_reordered <- gene_zMatrix[, match(names(cluster_treatment), names(gene_zMatrix))]
+
+
+condition_reordered <- data.frame(sorted[, 1])
+colnames(condition_reordered)[1] <- "treatment"
+rownames(condition_reordered) <- colnames(gene_zMatrix_reordered)
+
+gene_zMatrix_reordered <- gene_zMatrix_reordered[match(gene_final$ensembl_gene_id, rownames(gene_zMatrix_reordered)), ]
+rownames(gene_zMatrix_reordered) <- gene_final$external_gene_name
+
+p1 <- pheatmap(gene_zMatrix_reordered,
+               color = colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+               show_rownames = TRUE, 
+               cluster_cols = FALSE, 
+               cluster_rows = FALSE, 
+               annotation_col = condition_reordered, 
+               annotation_colors = list(treatment = c("0" = "lightpink", "1" = "lightgreen")),
+               cutree_rows = 2, 
+               cutree_cols = 2, 
+               fontsize_row = 7,
+               breaks = breaksList,
+               legend = TRUE
+)
+
+p1
+
+```
+
+# Heatmap for Log-FoldChange for each patient
+
+```{r}
+selected_genes <- gene_final$ensembl_gene_id
+zMatrix <- t(TPM_ordered_variance)
+gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
+gene_zMatrix <- as.data.frame(t(gene_zMatrix))
+df <- merge(as.data.frame(gene_zMatrix), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+df <- df[, c(2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,19)]
+
+df2 <- df %>%
+  pivot_longer(cols = -c(patient_id, treatment), names_to = "Gene", values_to = "logTPM") %>%
+  group_by(patient_id, Gene) 
+
+treatment_1 <- df2 %>% dplyr::filter(treatment == 1)
+treatment_0 <- df2 %>% dplyr::filter(treatment == 0)
+merged_data <- merge(treatment_1, treatment_0, by = c("patient_id", "Gene"), suffixes = c("_treatment_1", "_treatment_0"))
+merged_data <- merged_data %>%
+  mutate(diff_logTPM = logTPM_treatment_1 - logTPM_treatment_0) %>%
+  dplyr::select(Gene, patient_id, diff_logTPM) %>% 
+  pivot_wider(names_from = Gene, values_from = diff_logTPM) 
+
+rownames(merged_data) <- merged_data$patient_id
+patient <- as.data.frame(unique(coldata$patient_id))
+rownames(patient) <- patient$`unique(coldata$patient_id)`
+merged_data_patinet_order <- merged_data[rownames(patient), ]
+
+rownames(merged_data_patinet_order) <- merged_data_patinet_order$patient_id
+gene_LFC <- as.data.frame(t(merged_data_patinet_order))
+gene_LFC <- gene_LFC[-1, ]
+
+gene_LFC_reordered <- gene_LFC[match(gene_final$ensembl_gene_id, rownames(gene_LFC)), ]
+rownames(gene_LFC_reordered) <- gene_final$external_gene_name
+#keep patient_id the same as the previous heatmap
+breaksList = seq(-3, 3, by = 0.06)
+p4 <- pheatmap(gene_LFC_reordered, 
+         show_rownames = TRUE, 
+         cluster_cols = FALSE, 
+         cluster_rows = FALSE, 
+         cutree_rows = 2, 
+         cutree_cols = 2, 
+         breaks = breaksList,
+         fontsize_row = 7)
+```
+
+
+# Lasso nested cv
+
+```{r}
+alpha <- 1
+
+final_model_matrix <- as.data.frame(expression_matrix[, gene_final$ensembl_gene_id])
+final_model_matrix <- merge(as.data.frame(final_model_matrix), as.data.frame(coldata[1]), by = "row.names", all.x = TRUE)
+cv_matrix <- expression_matrix[, gene_final$ensembl_gene_id]
+
+genes_final_model <- paste(gene_final$ensembl_gene_id, collapse = " + ")
+
+formula_str <- paste("treatment ~", genes_final_model)
+
+   n_outer_folds <- length(final_model_matrix$treatment)  # LOOCV
+    n_inner_folds <- 23
+    outer_folds <- lapply(1:length(response_variable), function(i) i)
+    
+    set.seed(123)
+    final_lasso_nested_cv <- nestcv.glmnet(
+      y = final_model_matrix$treatment, 
+      x = cv_matrix, #'x' must be numeric
+      family = "binomial",
+      outer_method = "LOOCV", 
+      n_inner_folds = n_inner_folds,
+      outer_folds = outer_folds, 
+      alphaSet = alpha,
+      finalCV = TRUE
+    )
+    
+    final_gene <- final_lasso_nested_cv$final_vars
+```
+
+## AUC
+
+```{r}
+proc <- final_lasso_nested_cv$roc
+auc <- proc$auc
+plot.roc(
+  proc,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Nested-CV Final model\n Area under the curve (AUC):", round(auc, digits = 2))
+)
+
+```
+
+## Accuracy of nested cv
+
+```{r}
+final_lasso_nested_cv[["summary"]][["table"]]
+final_lasso_nested_cv[["summary"]][["metrics"]]
+```
+
+
+## Final model
+
+```{r}
+final_model_matrix <- as.data.frame(expression_matrix[, gene_final$ensembl_gene_id])
+final_model_matrix <- merge(as.data.frame(final_model_matrix), as.data.frame(coldata[1]), by = "row.names", all.x = TRUE)
+
+genes_final_model <- paste(gene_final$ensembl_gene_id, collapse = " + ")
+
+formula_str <- paste("treatment ~", genes_final_model)
+
+
+finalModel <- glm(formula_str,
+                  data = data.frame(final_model_matrix), #15 gene
+                  family = binomial) #poisson distribution
+                
+#try linear link
+summary(finalModel)
+```
+
+### Check correlation between each feature
+
+```{r}
+heatmap(cor(expression_matrix[, gene_final$ensembl_gene_id]))
+```
+
+
+## Check complete separation (perfect prediction)
+
+```{r}
+library("detectseparation")
+formula_str <- paste("treatment ~", genes_final_model)
+finalModel_sep <- glm(formula_str,
+                  data = as.data.frame(final_model_matrix),
+                  family = binomial(link = "logit"),
+                  method = "detect_separation")
+finalModel_sep
+# Check for perfect separation
+# the actual maximum likelihood estimates
+
+# coef(finalModel) + coef(finalModel_sep)
+# coef(summary(finalModel))[, "Std. Error"] + abs(coef(finalModel_sep))
+```
+
+## Method 1: Bayes
+```{r}
+library(arm)
+#reference paper: Convergence Failures in Logistic Regression 
+finalModel_bayes <- bayesglm(formula_str,
+                  data = as.data.frame(final_model_matrix),
+                  family = binomial(link = "logit"))
+display(finalModel_bayes)
+
+finalModel_bayes_sep <- bayesglm(formula_str,
+                  data = as.data.frame(final_model_matrix),
+                  family = binomial(link = "logit"),
+                  method = "detect_separation")
+finalModel_bayes_sep
+```
+
+### AUC:bayes
+```{r}
+require(pROC)
+proc <- roc(final_model_matrix$treatment, fitted(finalModel_bayes), smooth=FALSE)
+auc <-proc$auc
+plot.roc(
+  proc,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Final Lasso model\n Area under the curve (AUC):", round(auc, digits = 2))
+)
+```
+
+## Method 2: Firth's Bias-Reduced Logistic Regression
+Firth's bias reduction method, equivalent to penalization of the log-likelihood
+
+```{r}
+library(logistf)
+firth_model <- logistf(formula_str,
+                  data = as.data.frame(final_model_matrix))
+summary(firth_model)
+
+
+#check seperation
+firth_model_sep <- logistf(formula_str,
+                  data = as.data.frame(final_model_matrix),
+                  method = "detect_separation")
+firth_model_sep
+```
+
+```{r}
+predictions <- predict(firth_model, newdata = final_model_matrix, type = "response")
+
+#AUC
+auc_obj <- prediction(predictions, final_model_matrix$treatment)
+auc_value <- as.numeric(performance(auc_obj, "auc")@y.values)
+print(paste("AUC (test):", auc_value))
+
+proc_test <- roc(final_model_matrix$treatment,predictions)
+auc_test <-proc_test$auc
+plot.roc(
+  proc_test,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Final Lasso model on test data\n Area under the curve (AUC):", round(auc_test, digits = 2))
+)
+
+# accuracy
+predicted_classes <- ifelse(predictions > 0.5, 1, 0)
+accuracy <- sum(predicted_classes == final_model_matrix$treatment) / length(final_model_matrix$treatment)
+print(paste("Accuracy (test):", accuracy))
+```
+
+
+
+
+## Check direction of each gene in two models
+```{r}
+coefficients_bayes <- as.data.frame(finalModel_bayes[["coefficients"]])
+coefficients_bayes$ensembl_gene_id <- rownames(coefficients_bayes)
+colnames(coefficients_bayes)[1] <- "bayes"
+
+coefficients_firth <- as.data.frame(firth_model[["coefficients"]])
+coefficients_firth$ensembl_gene_id <- rownames(coefficients_firth)
+colnames(coefficients_firth)[1] <- "firth"
+
+merge_coefficients <- merge(coefficients_bayes, coefficients_firth, by = "ensembl_gene_id")
+merge_coefficients <- merge_coefficients[-1,]
+merge_coefficients <- merge(gene_final, merge_coefficients, by = "ensembl_gene_id", all = TRUE)
+
+
+merge_coefficients$direction_match <- ifelse(sign(merge_coefficients$bayes) == sign(merge_coefficients$firth), "Same", "Different")
+genes_with_different_directions <- merge_coefficients[merge_coefficients$direction_match == "Different", c("ensembl_gene_id", "external_gene_name")]
+print(genes_with_different_directions)
+
+```
+
+
+

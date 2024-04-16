@@ -1,0 +1,2056 @@
+---
+title: "Biswas_Ascherman_DEseq2_Remove_Outliers_Filter_Counts"
+author: 
+- name: "Computational Immunogenomics Core (CIG Core)"
+  affiliation: "Center for Systems Immunology, University of Pittsburgh"
+  email: "sis186@pitt.edu"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 3  # upto three depths of headings (specified by #, ## and ###)
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    number_sections: true  ## if you want number sections at each table header
+    theme: "default" # many options for theme, this one is my favorite.
+    highlight: tango  # specifies the syntax highlighting style
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## Libraries
+suppressMessages({
+  library(openxlsx)
+  library(biomaRt)
+  library(stringr)
+  library(matrixStats)
+  library(pheatmap)
+  library(dplyr)
+  library(ggfortify)
+  library(org.Hs.eg.db)
+  library(WebGestaltR)
+  library(DESeq2)
+  library(apeglm)
+  library(EnhancedVolcano)
+  library('janitor') #use the function: row_to_names
+})
+
+library("RNAseqQC")
+library("ensembldb")
+library("dplyr")
+library("ggplot2")
+library("purrr")
+library("tidyr")
+library("tibble")
+library("magrittr")
+library(DEGreport)
+library(writexl)
+library("glmnet")
+library("caret")  # For cv.glmnet function
+## Sourcing
+source("/ix/cigcore/utils/code/de.heatmap.R")
+library(brglm)
+library(tximport)
+library(sleuth)
+library(dplyr)
+library(VennDiagram)
+library(AnnotationDbi)
+library(enrichplot)
+library(tidyverse)
+library(cowplot) #plot_grid
+library(glmnet)
+library(doParallel)
+registerDoParallel(cores = 4) 
+## Set paths
+proj_path <- "/ix/cigcore/proj/biswas"
+data_path <- file.path(proj_path, "data", "Ascherman_TotalRNA_07_20_2023")
+resPath <- gsub(pattern="data", replacement="result", data_path)
+experiment <- "2-29-2023-DE_analysis_deseq2_lasso"
+experimentPath <- file.path(resPath, experiment)
+dir.create(experimentPath, showWarnings = TRUE, recursive = TRUE)
+#metadata_path <- file.path(data_path, "metadata_remove_unpaired_low_align.csv")
+#dir.create(webgestalt_path, recursive=TRUE)
+metadata_path <- file.path(data_path, "all_metadata_remove_unpaired_low_align.csv") 
+```
+
+
+```{r count, include=FALSE}
+coldata <- read.csv(file.path(metadata_path), row.names = 1) #Metadata
+coldata$sample <- rownames(coldata)  # new variable:sample = rownames in 'coldata'
+#coldata <- coldata[ , c("sample", "treatment")]
+coldata$treatment <- ifelse(coldata$treatment == "Pre", 0, 1)
+coldata$treatment <- factor(coldata$treatment)
+coldata$age_group <- factor(coldata$age_group)
+```
+
+## old version of TPM (60708 genes after removing version number/duplicates)
+```{r}
+count <- read.table(file.path(resPath, "rsem_counts", "TPM.txt"), 
+                    row.names = 1, header = TRUE, check.names = FALSE)
+count$ensembl_gene_id_version <- rownames(count)
+rownames(count) <- NULL
+count$ensembl_gene_id <- sub("\\.\\d+$", "", count$ensembl_gene_id_version)
+count <- count[, -35]
+count <- count[(!duplicated(count$ensembl_gene_id)), ]
+rownames(count) <- count$ensembl_gene_id
+
+TPM <- count[, c(-35, -36)]
+TPM <- TPM[(!duplicated(rownames(TPM))), ]
+
+TPM[, 1:ncol(TPM)] <- sapply(TPM[, 1:ncol(TPM)], as.numeric) #convert it to numeric factors
+TPM <- TPM[, rownames(coldata)]
+all(colnames(TPM) %in% rownames(coldata)) # checking to see if sample names match between the two files
+all(colnames(TPM) == rownames(coldata)) # checking to see if the sample names are in the same order in both files
+```
+
+## tripoxt 
+
+```{r}
+RSEM_path <- file.path(resPath, "rsem_counts")
+rsem_files <- list.files(RSEM_path, pattern = "quant_star-rsem.genes.results", full.names = TRUE)
+sample_names <- sapply(strsplit(basename(rsem_files), "_"), function(x) paste(x[1:4], collapse = "_"))
+names(rsem_files) <- sample_names
+
+txi.rsem <- tximport(rsem_files, type = "rsem", txIn = FALSE, txOut = FALSE) #txIn/Out = FALSE --> gene-level
+# Still have 60708 genes (stay the same number after removing version number + duplicates)
+
+#filter length: remove 0-length values
+txi.rsem$abundance <-
+  txi.rsem$abundance[apply(txi.rsem$length,
+                                1,
+                                function(row) all(row !=0 )),]
+# keep counts have same number of levels as abundance 
+txi.rsem$counts <-
+  txi.rsem$counts[apply(txi.rsem$length,
+                                1,
+                                function(row) all(row !=0 )),]
+# align samples: make sure rownames of txi.rsem correspond to sample names in coldata
+counts <- as.data.frame(txi.rsem$counts)
+counts <- counts[, rownames(coldata)]
+# filter genes with sum of counts >= 10 in all samples 
+# filtered_counts <- counts[rowSums(counts) >= 10, ] #29221
+
+# remove genes with counts < 10 in over half of samples
+remove_low_counts <- counts[rowSums(counts >= 10) >= 12, ] # 16941
+
+nzv_genes <- nearZeroVar(t(remove_low_counts)) #didn't find any non-zero variance genes
+
+# remove genes with a high frequency of zeros counts (0 count in over 20% of the samples)
+remove_high_0_counts <- remove_low_counts[rowSums(remove_low_counts == 0) <= 0.2 * ncol(remove_low_counts), ] #16895
+
+filtered_counts <- remove_high_0_counts
+
+subset_abundance <- txi.rsem$abundance[rownames(filtered_counts), ]
+tximport_TPM <- as.data.frame(subset_abundance) 
+tximport_TPM <- tximport_TPM[, rownames(coldata)]
+
+#check if there is any overlapping
+#common_genes <- intersect(rownames(tximport_TPM), rownames(res_LRT))
+#nrow(tximport_TPM)  #16895
+#nrow(res_LRT) #19395
+#length(common_genes) #16895
+
+tximport_TPM$ensembl_gene_id_version <- rownames(tximport_TPM)
+rownames(tximport_TPM) <- NULL
+tximport_TPM$ensembl_gene_id <- sub("\\.\\d+$", "", tximport_TPM$ensembl_gene_id_version)
+rownames(tximport_TPM) <- tximport_TPM$ensembl_gene_id
+
+tximport_TPM <- tximport_TPM[, c(-25, -26)]
+tximport_TPM <- tximport_TPM[(!duplicated(rownames(tximport_TPM))), ]
+
+tximport_TPM[, 1:ncol(tximport_TPM)] <- sapply(tximport_TPM[, 1:ncol(tximport_TPM)], as.numeric) #convert it to numeric factors
+all(colnames(tximport_TPM) %in% rownames(coldata)) # checking to see if sample names match between the two files
+all(colnames(tximport_TPM) == rownames(coldata)) # checking to see if the sample names are in the same order in both files
+```
+
+## Sample Metadata
+
+```{r metadata, echo=FALSE}
+sampleInfo <- coldata
+numSamples <- dim(sampleInfo)[1]
+sampleInfo$Sequence <- seq_len(nrow(sampleInfo))
+rownames(sampleInfo) <- NULL
+knitr::kable(sampleInfo)
+```
+
+
+# Z-score
+
+```{r}
+logTPM <- function(x) {return(log2(x+1))}
+Abundance_logTPM <- tximport_TPM %>% mutate_if(is.numeric, logTPM)
+row_std <- apply(Abundance_logTPM, 1, sd, na.rm = TRUE)
+row_means <- rowMeans(Abundance_logTPM, na.rm = TRUE)
+zMatrix <- (Abundance_logTPM - row_means) / row_std
+zMatrix[is.na(zMatrix)] <- 0
+zMatrix_logTPM <- t(zMatrix)
+```
+
+# Order genes based on variance (from high to low)
+```{r}
+gene_variances <- apply(zMatrix_logTPM, 2, var)
+ordered_genes <- names(sort(gene_variances, decreasing = TRUE))
+zMatrix_logTPM_ordered <- zMatrix_logTPM[, ordered_genes]
+```
+
+# lasso
+```{r}
+#PLSDA/lasso/patial least square/linear regression 
+
+#X: expression matrix
+expression_matrix <- as.matrix(zMatrix_logTPM)
+#Y: response variable 
+response_variable <- coldata$treatment
+response_variable <- as.factor(response_variable)
+# lasso 
+#lassoModel <- glmnet(x = expression_matrix, y = response_variable, alpha = 0.5, family = "binomial", standardize = FALSE)
+lassoModel <- glmnet(x = expression_matrix, y = response_variable, alpha = 1, family = "binomial", standardize = FALSE)
+
+plot(lassoModel, xvar="lambda")
+summary(lassoModel)
+# Perform 5-fold cross-validation
+#got Warning: executing %dopar% sequentially: no parallel backend registered
+#install.packages("doParallel")
+#library(doParallel)
+#registerDoParallel(cores = 4) 
+set.seed(123)
+cv.lassoModel <- cv.glmnet(x = expression_matrix, y = response_variable, alpha = 1, nfolds = 5, family = "binomial", parallel = TRUE, standardize = FALSE)
+
+idealLambda <- cv.lassoModel$lambda.min # Identify best predictors based on cross-validation
+idealLambda1se <- cv.lassoModel$lambda.1se
+# plot variable deviances vs. shrinkage parameter, λ (lambda)
+plot(cv.lassoModel)
+cat("Optimal Lambda:", idealLambda, "\n")
+cat("Optimal Lambda on 1se:", idealLambda1se, "\n")
+
+# derive coefficients for each gene
+co <- coef(cv.lassoModel, s = idealLambda, exact = TRUE) # Derive coefficients for each gene
+co.se <- coef(cv.lassoModel, s = idealLambda1se, exact = TRUE)
+
+co.se[co.se[,1]!=0,]
+co[co[,1]!=0,]
+nonzero_coefficients <- co[co[, 1] != 0, ] # Print the non-zero coefficients
+gene_names <- names(nonzero_coefficients)
+cat("Non-zero Coefficients:\n", gene_names, "\n")
+
+```
+
+# try different lambda
+```{r}
+#X: expression matrix
+expression_matrix <- as.matrix(zMatrix_logTPM)
+#Y: response variable 
+response_variable <- coldata$treatment
+response_variable <- as.factor(response_variable)
+
+list.of.fits <- list()
+for (i in 0:10) {
+  fit.name <- paste0("alpha", i/10)
+  set.seed(123)
+  list.of.fits[[fit.name]] <-
+    cv.glmnet(x = expression_matrix, y = response_variable, alpha = i/10, nfolds = 5, family = "binomial", parallel = TRUE, standardize = FALSE)
+}
+list.of.fits
+
+best_alpha <- NULL
+best_lambda <- NULL
+min_deviance <- Inf
+best_model <- NULL
+
+for (i in 0:10) {
+  fit.name <- paste0("alpha", i/10)
+  current_fit <- list.of.fits[[fit.name]]
+#cvm: mean cross-validated error ~~ minimum deviance: model's performance averaged over different folds and lambda values.
+  min_index <- which.min(current_fit$cvm)
+  if (current_fit$cvm[min_index] < min_deviance) {
+    min_deviance <- current_fit$cvm[min_index]
+    best_alpha <- i/10
+    best_lambda <- current_fit$lambda[min_index]
+    best_model <- current_fit
+  }
+}
+
+cat("Best Alpha:", best_alpha, "\n")
+cat("Best Lambda:", best_lambda, "\n")
+cat("Minimum Cross-Validated Deviance:", min_deviance, "\n")
+
+best_coefs <- coef(best_model, s = best_lambda)
+nonzero_coeffs <- names(best_coefs[best_coefs[, 1] != 0, ])
+selected_gene <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+
+# Print non-zero coefficients for the best model
+cat("Non-zero Coefficients for the Best Model:\n", nonzero_coeffs, "\n")
+
+
+```
+
+```{r}
+selected_gene <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+
+TPM_metadata <- merge(as.data.frame(zMatrix_logTPM), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+
+genes_final_model <- paste(selected_gene, collapse = " + ")
+
+formula_str <- paste("response_variable ~", genes_final_model)
+
+finalLasso <- glm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  control = list(maxit = 1000))
+summary(finalLasso)
+```
+```{r}
+# ROC analysis
+require(pROC)
+
+roc <- roc(response_variable, fitted(finalLasso), smooth=FALSE)
+auc <- ci.auc(roc)[2]
+plot.roc(
+  roc,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Final Lasso model\n Area under the curve (AUC):", round(auc, digits = 2))
+)
+```
+
+```{r}
+library("detectseparation")
+
+finalLasso_sep <- glm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  method = "detect_separation")
+finalLasso_sep
+# Check for perfect separation
+# the actual maximum likelihood estimates
+
+coef(finalLasso) + coef(finalLasso_sep)
+coef(summary(finalLasso))[, "Std. Error"] + abs(coef(finalLasso_sep))
+```
+```{r}
+library(arm)
+#reference paper: Convergence Failures in Logistic Regression 
+finalLasso_bayes <- bayesglm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"))
+display(finalLasso_bayes)
+
+finalLasso_bayes_sep <- bayesglm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  method = "detect_separation")
+finalLasso_bayes_sep
+
+```
+
+```{r}
+# ROC analysis
+require(pROC)
+
+roc <- roc(response_variable, fitted(finalLasso_bayes), smooth=FALSE)
+auc <- ci.auc(roc)[2]
+plot.roc(
+  roc,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Final Lasso model\n Area under the curve (AUC):", round(auc, digits = 2))
+)
+```
+
+
+```{r ora1, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+library(clusterProfiler) # perform ORA
+library(org.Hs.eg.db) # Homo sapiens annotation --> gene identifier conversion
+library(ReactomePA) # Reactome
+
+#Each gene is represented by a human Entrez gene ID, which is the default keytype used by the clusterProfiler functions (and the only keytype compatible with ReactomePA::enrichPathway).
+cp_path <- file.path(experimentPath, "pathway_analysis_ORA")
+dir.create(cp_path, recursive=TRUE)
+
+ensemblID <- selected_gene
+attributes <- c("ensembl_gene_id", "external_gene_name")
+ensemblMart <- useMart("ensembl", dataset="hsapiens_gene_ensembl")
+external_gene_names <- getBM(attributes = attributes, filters = "ensembl_gene_id", values = selected_gene, mart = ensemblMart)$external_gene_name
+entrez_genes <- bitr(external_gene_names, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = "org.Hs.eg.db")
+
+
+# Reactome pathway over-representation analysis
+    reactome_1 <- enrichPathway(gene = entrez_genes$ENTREZID, organism = "human", pvalueCutoff=0.2, pAdjustMethod = "BH", qvalueCutoff = 0.2, readable=TRUE)
+    ORA <- list()
+    ORA[[paste0("Reactome")]] <- reactome_1
+    tab.reactome_1 <- as.data.frame(reactome_1)
+    
+# KEGG pathway over-representation analysis
+    kegg_1 <- enrichKEGG(gene = entrez_genes$ENTREZID, organism = "hsa",  pvalueCutoff=0.2, pAdjustMethod = "BH", qvalueCutoff = 0.2, use_internal_data = FALSE)
+
+    plots_list <- list()
+    
+for(a1 in names(ORA)){
+  reacORkegg <- ORA[[a1]]
+  if(nrow(reacORkegg) !=0){
+    # Create directories for each result
+    ORA_path <- file.path(cp_path, a1)
+    dir.create(ORA_path, recursive=TRUE)
+    
+    ORA_df <- as.data.frame(reacORkegg)
+    write.csv(ORA_df, file.path(ORA_path, paste0(a1, ".csv")))
+    
+    # Plot enrichment result - dotplot
+    fit <- plot(dotplot(reacORkegg, showCategory = 40))
+    png(filename = file.path(ORA_path, paste0(a1, "_dotplot.png")), res = 300, width = 17, height = 10, units = "in")
+    print(fit)
+    dev.off()
+    
+    plots_list[[a1]] <- fit
+  }
+  
+  if (nrow(reacORkegg) > 20){ #change number
+    # Weighted Set Cover of geneSets
+    weightedPath <- file.path(cp_path, "weightedSetCover", a1)
+    dir.create(weightedPath, recursive=TRUE)
+    
+    setCoverNum = abs(0.40*(nrow(ORA_df)))
+    nThreads = 4
+    idsInSet <- sapply(ORA_df$geneID, strsplit, split="/")
+    names(idsInSet) <- ORA_df$ID    
+    minusLogP <- -log(ORA_df$pvalue)
+    minusLogP[minusLogP == Inf] <- -log(.Machine$double.eps)
+    wscRes <- weightedSetCover(idsInSet=idsInSet, costs=(1 / minusLogP), topN=setCoverNum, nThreads=nThreads)
+
+    wscRes_full <- ORA_df[c(match(wscRes$topSets, ORA_df$ID)),]
+    wscRes_full <- wscRes_full[order(wscRes_full$p.adjust), ]
+    write.csv(wscRes_full, file.path(weightedPath, paste0(a1, ".csv")))
+    
+    # Plot enrichment result of weighted set cover - dotplot
+    reacORkegg2 <- reacORkegg
+    reacORkegg2@result <- wscRes_full
+      
+    # Set larger bottom margin to make space for y-axis labels
+    fit <- plot(dotplot(reacORkegg2, showCategory = 40), main = paste0(a1))
+    png(filename = file.path(weightedPath, paste0(a1, "_dotplot.png")), res = 300, width = 17, height = 28, units = "in")
+    print(fit)
+    dev.off()
+    plots_list[[paste0(a1, "weightSet")]] <- fit
+  }
+}    
+```
+
+
+```{r}
+library(pROC)
+predictions <- predict(lassoModel, newx = expression_matrix, s = idealLambda1se, type = "response") # Use the entire dataset for prediction
+predicted_classes <- ifelse(predictions > 0.5, 1, 0) # Convert predicted probabilities to class labels
+
+conf_matrix <- table(predicted_classes, response_variable)
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+auc_roc <- roc(response = response_variable, predictor = as.vector(predictions))$auc
+
+cat("Confusion Matrix:\n", conf_matrix, "\n")
+cat("Accuracy:", accuracy, "\n")
+cat("AUC-ROC:", auc_roc, "\n")
+
+plot(lassoModel, xvar = "lambda", label = TRUE) ## Visualize Feature Importance
+
+
+roc_curve <- roc(response = response_variable, predictor = as.vector(predictions)) # Visualize ROC Curve
+plot(roc_curve, main = "ROC Curve", col = "blue", lwd = 2)
+auc_roc <- auc(roc_curve)
+
+```
+
+# run lasso model in WGCNA
+
+```{r}
+#X: expression matrix
+expression_matrix <- as.matrix(zMatrix_logTPM_ordered)
+#Y: response variable 
+response_variable <- coldata$treatment
+response_variable <- as.factor(response_variable)
+```
+
+```{r}
+file_path_cyan <- "/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/3-25-2023-WGCNA/module_csv/cyan.csv"
+file_path_black <- "/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/3-25-2023-WGCNA/module_csv/black.csv"
+
+positive <- read.csv(file_path_cyan)
+negative <- read.csv(file_path_black)
+
+positive_expression_matrix <- expression_matrix[,positive$gene] #cyan: 103
+negative_expression_matrix <- expression_matrix[,negative$gene] #black: 383
+```
+
+# positive correlation to post-treatment
+```{r}
+  alpha <- 1
+  
+  set.seed(123)
+  
+ lassoModel <- glmnet(x = positive_expression_matrix, y = response_variable, alpha = alpha, family = "binomial", standardize = FALSE)
+
+ plot(lassoModel, xvar="lambda")
+summary(lassoModel)
+
+  current_model <- cv.glmnet(
+    x = positive_expression_matrix,
+    y = response_variable,
+    alpha = alpha,
+    nfolds = 5,
+    family = "binomial",
+    parallel = TRUE,
+    standardize = FALSE
+  )
+  
+  plot(current_model)
+  
+  # Choose lambda that gives more non-zero coefficients
+  co_min <- coef(current_model, s = current_model$lambda.min, exact = TRUE) 
+  co_1se <- coef(current_model, s = current_model$lambda.1se, exact = TRUE) 
+  
+  num_nonzero_min <- sum(co_min[, 1] != 0) 
+  num_nonzero_1se <- sum(co_1se[, 1] != 0) 
+  
+  if (num_nonzero_min > num_nonzero_1se) {
+    idealLambda <- current_model$lambda.min
+    best_coefs <- co_min
+  } else {
+    idealLambda <- current_model$lambda.1se
+    best_coefs <- co_1se
+  }
+  
+  # Extract selected genes based on chosen lambda
+  nonzero_coeffs <- names(best_coefs[best_coefs[, 1] != 0, ])
+  selected_genes <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+  cat("Non-zero Coefficients:\n", selected_genes, "\n")
+```
+
+```{r}
+
+ensemblID <- selected_genes
+attributes <- c("ensembl_gene_id", "external_gene_name")
+ensemblMart <- useMart("ensembl", dataset="hsapiens_gene_ensembl")
+external_gene_names_positive <- getBM(attributes = attributes, filters = "ensembl_gene_id", values = selected_genes, mart = ensemblMart)
+
+
+
+TPM_metadata <- merge(as.data.frame(zMatrix_logTPM_ordered), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+
+
+genes_final_model <- paste(selected_genes, collapse = " + ")
+
+formula_str <- paste("response_variable ~", genes_final_model)
+
+finalModel_positive <- glm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  control = list(maxit = 1000))
+
+
+summary(finalModel_positive)
+```
+
+
+
+
+```{r}
+# 1. Confusion Matrix and Classification Metrics
+predicted <- predict(finalModel_positive, type = "response") > 0.5
+conf_mat <- table(predicted, response_variable)
+conf_mat
+accuracy <- sum(diag(conf_mat)) / sum(conf_mat)
+precision <- conf_mat[2, 2] / sum(conf_mat[, 2])
+Sensitivity <- conf_mat[2, 2] / sum(conf_mat[2, ])
+specificity <- conf_mat[1, 1] / sum(conf_mat[1, ])
+accuracy
+precision
+Sensitivity
+specificity
+
+
+```
+
+```{r}
+library(pROC)
+roc <- roc(response_variable, fitted(finalModel_300), smooth=FALSE)
+auc <- ci.auc(roc)[2]
+plot.roc(
+  roc,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Final Lasso model 100 features/chunk\n Area under the curve (AUC):", round(auc, digits = 2))
+)
+```
+
+```{r}
+library(RColorBrewer)
+selected_genes <- external_gene_names_positive$ensembl_gene_id
+zMatrix <- t(zMatrix_logTPM_ordered)
+gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
+gene_zMatrix <- as.data.frame(gene_zMatrix)
+
+
+condition <- data.frame(coldata[, 1])
+colnames(condition)[1] <- "treatment"
+rownames(condition) <- colnames(gene_zMatrix)
+
+breaksList = seq(-3, 3, by = 0.06)
+
+p1 <- pheatmap(gene_zMatrix,
+               color = colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+               show_rownames = TRUE, 
+               cluster_cols = FALSE, 
+               cluster_rows = FALSE, 
+               annotation_col = condition, 
+               annotation_colors = list(treatment = c("0" = "lightpink", "1" = "lightgreen")),
+               cutree_rows = 2, 
+               cutree_cols = 2, 
+               fontsize_row = 7,
+               breaks = breaksList,
+               legend = TRUE
+)
+
+p1
+
+sorted <- coldata[order(coldata$treatment == '0', coldata$treatment), ]
+cluster_treatment <- as.data.frame(t(sorted[, c(1:4)]))
+
+gene_zMatrix_reordered <- gene_zMatrix[, match(names(cluster_treatment), names(gene_zMatrix))]
+
+condition_reordered <- data.frame(sorted[, 1])
+colnames(condition_reordered)[1] <- "treatment"
+rownames(condition_reordered) <- colnames(gene_zMatrix_reordered)
+
+p2 <- pheatmap(gene_zMatrix_reordered,
+               color = colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+               show_rownames = TRUE, 
+               cluster_cols = FALSE, 
+               cluster_rows = FALSE, 
+               annotation_col = condition_reordered, 
+               annotation_colors = list(treatment = c("0" = "lightpink", "1" = "lightgreen")),
+               cutree_rows = 2, 
+               cutree_cols = 2, 
+               fontsize_row = 7,
+               breaks = breaksList,
+               legend = TRUE
+)
+
+p2
+```
+# negative correlation to post-treatment
+```{r}
+  alpha <- 1
+  
+  set.seed(123)
+  
+ lassoModel <- glmnet(x = negative_expression_matrix, y = response_variable, alpha = alpha, family = "binomial", standardize = FALSE)
+
+ plot(lassoModel, xvar="lambda")
+summary(lassoModel)
+
+  current_model <- cv.glmnet(
+    x = negative_expression_matrix,
+    y = response_variable,
+    alpha = alpha,
+    nfolds = 5,
+    family = "binomial",
+    parallel = TRUE,
+    standardize = FALSE
+  )
+  
+  plot(current_model)
+  
+  # Choose lambda that gives more non-zero coefficients
+  co_min <- coef(current_model, s = current_model$lambda.min, exact = TRUE) 
+  co_1se <- coef(current_model, s = current_model$lambda.1se, exact = TRUE) 
+  
+  num_nonzero_min <- sum(co_min[, 1] != 0) 
+  num_nonzero_1se <- sum(co_1se[, 1] != 0) 
+  
+  if (num_nonzero_min > num_nonzero_1se) {
+    idealLambda <- current_model$lambda.min
+    best_coefs <- co_min
+  } else {
+    idealLambda <- current_model$lambda.1se
+    best_coefs <- co_1se
+  }
+  
+  # Extract selected genes based on chosen lambda
+  nonzero_coeffs <- names(best_coefs[best_coefs[, 1] != 0, ])
+  selected_genes <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+  cat("Non-zero Coefficients:\n", selected_genes, "\n")
+```
+
+# run lasso model within chunks 
+
+
+```{r}
+generate_overlapping_chunks <- function(num_features, chunk_size, overlap) {
+  num_chunks <- ceiling(num_features / (chunk_size - overlap))
+  chunk_starts <- seq(1, num_features, by = chunk_size - overlap)
+  chunk_ends <- pmin(chunk_starts + chunk_size - 1, num_features)
+  chunks <- lapply(1:num_chunks, function(i) c(chunk_starts[i], chunk_ends[i]))
+  return(chunks)
+}
+```
+
+# chunk size = 300 features (expression_matrix is ordered from high variance to low variance)
+
+```{r}
+#X: expression matrix
+expression_matrix <- as.matrix(zMatrix_logTPM_ordered)
+#Y: response variable 
+response_variable <- coldata$treatment
+response_variable <- as.factor(response_variable)
+```
+
+```{r}
+num_features <- ncol(expression_matrix)
+chunk_size <- 300 
+overlap <- 0 
+
+feature_overlap_chunks <- generate_overlapping_chunks(num_features, chunk_size, overlap)
+
+list_of_coefficients <- list()
+list_of_models <- list()
+
+for (chunk_index in seq_along(feature_overlap_chunks)) {
+  chunk <- feature_overlap_chunks[[chunk_index]]  
+  
+  subset_expression_matrix <- expression_matrix[, chunk[1]:chunk[2]]
+  
+  # Set alpha to 1 to enforce Lasso regularization
+  alpha <- 1 #linear
+  
+  # 1000 features --> first 5/6 chunks
+  # true cross validation --> overfitting
+  set.seed(123)
+  current_model <- cv.glmnet(
+    x = subset_expression_matrix,
+    y = response_variable,
+    alpha = alpha,
+    nfolds = 5,
+    family = "binomial",
+    parallel = TRUE,
+    standardize = FALSE
+  )
+  
+  # Choose lambda that gives more non-zero coefficients
+  co_min <- coef(current_model, s = current_model$lambda.min, exact = TRUE) 
+  co_1se <- coef(current_model, s = current_model$lambda.1se, exact = TRUE) 
+  
+  num_nonzero_min <- sum(co_min[, 1] != 0) 
+  num_nonzero_1se <- sum(co_1se[, 1] != 0) 
+  
+  if (num_nonzero_min > num_nonzero_1se) {
+    idealLambda <- current_model$lambda.min
+    best_coefs <- co_min
+  } else {
+    idealLambda <- current_model$lambda.1se
+    best_coefs <- co_1se
+  }
+  
+  # Extract selected genes based on chosen lambda
+  nonzero_coeffs <- names(best_coefs[best_coefs[, 1] != 0, ])
+  selected_gene <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+  list_of_coefficients[[paste0("chunk", chunk_index)]] <- selected_gene
+  list_of_models[[paste0("chunk", chunk_index)]] <- current_model
+  
+}
+
+list_of_coefficients
+all_genes <- unlist(list_of_coefficients)
+df_genes <- data.frame(gene = all_genes)
+selected_genes2 <- unique(df_genes$gene)
+selected_genes2 
+```
+
+
+```{r}
+ensemblID <- selected_genes2 #11
+attributes <- c("ensembl_gene_id", "external_gene_name")
+ensemblMart <- useMart("ensembl", dataset="hsapiens_gene_ensembl")
+external_gene_names_300 <- getBM(attributes = attributes, filters = "ensembl_gene_id", values = selected_genes2, mart = ensemblMart)
+
+
+
+TPM_metadata <- merge(as.data.frame(zMatrix_logTPM_ordered), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+
+
+genes_final_model <- paste(selected_genes2, collapse = " + ")
+
+formula_str <- paste("response_variable ~", genes_final_model)
+
+finalModel_300 <- glm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"), #linear
+                  control = list(maxit = 1000))
+
+
+summary(finalModel_300)
+```
+
+
+
+
+```{r}
+# 1. Confusion Matrix and Classification Metrics
+predicted <- predict(finalModel_300, type = "response") > 0.5
+conf_mat <- table(predicted, response_variable)
+conf_mat
+accuracy <- sum(diag(conf_mat)) / sum(conf_mat)
+precision <- conf_mat[2, 2] / sum(conf_mat[, 2])
+Sensitivity <- conf_mat[2, 2] / sum(conf_mat[2, ])
+specificity <- conf_mat[1, 1] / sum(conf_mat[1, ])
+accuracy
+precision
+Sensitivity
+specificity
+
+
+```
+```{r}
+library(pROC)
+roc <- roc(response_variable, fitted(finalModel_300), smooth=FALSE)
+auc <- ci.auc(roc)[2]
+plot.roc(
+  roc,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Final Lasso model 100 features/chunk\n Area under the curve (AUC):", round(auc, digits = 2))
+)
+```
+
+```{r}
+library(RColorBrewer)
+selected_genes <- external_gene_names_300$ensembl_gene_id
+zMatrix <- t(zMatrix_logTPM_ordered)
+gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
+gene_zMatrix <- as.data.frame(gene_zMatrix)
+
+
+condition <- data.frame(coldata[, 1])
+colnames(condition)[1] <- "treatment"
+rownames(condition) <- colnames(gene_zMatrix)
+
+breaksList = seq(-3, 3, by = 0.06)
+
+p3 <- pheatmap(gene_zMatrix,
+               color = colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+               show_rownames = TRUE, 
+               cluster_cols = FALSE, 
+               cluster_rows = FALSE, 
+               annotation_col = condition, 
+               annotation_colors = list(treatment = c("0" = "lightpink", "1" = "lightgreen")),
+               cutree_rows = 2, 
+               cutree_cols = 2, 
+               fontsize_row = 7,
+               breaks = breaksList,
+               legend = TRUE
+)
+
+sorted <- coldata[order(coldata$treatment == '0', coldata$treatment), ]
+cluster_treatment <- as.data.frame(t(sorted[, c(1:4)]))
+
+gene_zMatrix_reordered <- gene_zMatrix[, match(names(cluster_treatment), names(gene_zMatrix))]
+
+condition_reordered <- data.frame(sorted[, 1])
+colnames(condition_reordered)[1] <- "treatment"
+rownames(condition_reordered) <- colnames(gene_zMatrix_reordered)
+
+p4 <- pheatmap(gene_zMatrix_reordered,
+               color = colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+               show_rownames = TRUE, 
+               cluster_cols = FALSE, 
+               cluster_rows = FALSE, 
+               annotation_col = condition_reordered, 
+               annotation_colors = list(treatment = c("0" = "lightpink", "1" = "lightgreen")),
+               cutree_rows = 2, 
+               cutree_cols = 2, 
+               fontsize_row = 7,
+               breaks = breaksList,
+               legend = TRUE
+)
+
+p4 
+```
+
+# chunk size = 100 features
+```{r}
+num_features <- ncol(expression_matrix)
+chunk_size <- 100 #500
+overlap <- 0 #adjust #100
+
+feature_overlap_chunks <- generate_overlapping_chunks(num_features, chunk_size, overlap)
+
+list_of_coefficients <- list()
+list_of_models <- list()
+
+for (chunk_index in seq_along(feature_overlap_chunks)) {
+  chunk <- feature_overlap_chunks[[chunk_index]]  
+  
+  subset_expression_matrix <- expression_matrix[, chunk[1]:chunk[2]]
+  
+  # Set alpha to 1 to enforce Lasso regularization
+  alpha <- 1
+  
+  set.seed(123)
+  current_model <- cv.glmnet(
+    x = subset_expression_matrix,
+    y = response_variable,
+    alpha = alpha,
+    nfolds = 5,
+    family = "binomial",
+    parallel = TRUE,
+    standardize = FALSE
+  )
+  
+  # Choose lambda that gives more non-zero coefficients
+  co_min <- coef(current_model, s = current_model$lambda.min, exact = TRUE) 
+  co_1se <- coef(current_model, s = current_model$lambda.1se, exact = TRUE) 
+  
+  num_nonzero_min <- sum(co_min[, 1] != 0) 
+  num_nonzero_1se <- sum(co_1se[, 1] != 0) 
+  
+  if (num_nonzero_min > num_nonzero_1se) {
+    idealLambda <- current_model$lambda.min
+    best_coefs <- co_min
+  } else {
+    idealLambda <- current_model$lambda.1se
+    best_coefs <- co_1se
+  }
+  
+  # Extract selected genes based on chosen lambda
+  nonzero_coeffs <- names(best_coefs[best_coefs[, 1] != 0, ])
+  selected_gene <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+  list_of_coefficients[[paste0("chunk", chunk_index)]] <- selected_gene
+  list_of_models[[paste0("chunk", chunk_index)]] <- current_model
+  
+}
+
+list_of_coefficients
+all_genes <- unlist(list_of_coefficients)
+df_genes <- data.frame(gene = all_genes)
+selected_genes2 <- unique(df_genes$gene)
+selected_genes2 
+```
+
+```{r}
+#logTPM_100 <- t(Abundance_logTPM)[, selected_genes_100]
+
+#run lasso
+selected_genes_100 <- selected_genes2
+expression_matrix_100 <- expression_matrix[, selected_genes_100]
+
+# lasso 
+lassoModel_100 <- glmnet(x = expression_matrix_100, y = response_variable, alpha = 1, family = "binomial", standardize = FALSE)
+
+plot(lassoModel_100, xvar="lambda")
+summary(lassoModel_100)
+# Perform 5-fold cross-validation
+#got Warning: executing %dopar% sequentially: no parallel backend registered
+#install.packages("doParallel")
+#library(doParallel)
+#registerDoParallel(cores = 4) 
+set.seed(123)
+cv.lassoModel_100 <- cv.glmnet(x = expression_matrix_100, y = response_variable, alpha = 1, nfolds = 5, family = "binomial", parallel = TRUE, standardize = FALSE)
+
+idealLambda <- cv.lassoModel_100$lambda.min # Identify best predictors based on cross-validation
+idealLambda1se <- cv.lassoModel_100$lambda.1se
+# plot variable deviances vs. shrinkage parameter, λ (lambda)
+plot(cv.lassoModel_100)
+cat("Optimal Lambda:", idealLambda, "\n")
+cat("Optimal Lambda on 1se:", idealLambda1se, "\n")
+
+co_min <- coef(cv.lassoModel_100, s = idealLambda, exact = TRUE) # Derive coefficients for each gene
+co_1se <- coef(cv.lassoModel_100, s = idealLambda1se, exact = TRUE)
+
+  num_nonzero_min <- sum(co_min[, 1] != 0) 
+  num_nonzero_1se <- sum(co_1se[, 1] != 0) 
+  
+  if (num_nonzero_min > num_nonzero_1se) {
+    best_coefs <- co_min
+  } else {
+    best_coefs <- co_1se
+  }
+  
+nonzero_coefficients_100 <- best_coefs[best_coefs[, 1] != 0, ] # Print the non-zero coefficients
+gene_names <- names(nonzero_coefficients_100)
+cat("Non-zero Coefficients:\n", gene_names, "\n")
+```
+
+```{r}
+selected_genes <- gene_names[gene_names != "(Intercept)"]
+ensemblID <- selected_genes
+attributes <- c("ensembl_gene_id", "external_gene_name")
+ensemblMart <- useMart("ensembl", dataset="hsapiens_gene_ensembl")
+external_gene_names_100 <- getBM(attributes = attributes, filters = "ensembl_gene_id", values = selected_genes, mart = ensemblMart)
+
+
+
+TPM_metadata <- merge(as.data.frame(zMatrix_logTPM), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+
+
+genes_final_model <- paste(selected_genes, collapse = " + ")
+
+formula_str <- paste("response_variable ~", genes_final_model)
+
+finalModel_100 <- glm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  control = list(maxit = 1000))
+
+summary(finalModel_100)
+```
+
+```{r}
+finalModel_bayes_2 <- bayesglm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"))
+display(finalModel_bayes_2)
+
+finalModel_bayes_sep_2 <- bayesglm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  method = "detect_separation")
+finalModel_bayes_sep_2
+```
+
+
+
+```{r}
+# 1. Confusion Matrix and Classification Metrics
+predicted <- predict(finalModel_100, type = "response") > 0.5
+conf_mat <- table(predicted, response_variable)
+conf_mat
+accuracy <- sum(diag(conf_mat)) / sum(conf_mat)
+precision <- conf_mat[2, 2] / sum(conf_mat[, 2])
+Sensitivity <- conf_mat[2, 2] / sum(conf_mat[2, ])
+specificity <- conf_mat[1, 1] / sum(conf_mat[1, ])
+accuracy
+precision
+Sensitivity
+specificity
+
+
+```
+```{r}
+library(pROC)
+roc <- roc(response_variable, fitted(finalModel_100), smooth=FALSE)
+auc <- ci.auc(roc)[2]
+plot.roc(
+  roc,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Final Lasso model 100 features/chunk\n Area under the curve (AUC):", round(auc, digits = 2))
+)
+```
+
+# chunk size = 50 features
+```{r}
+num_features <- ncol(expression_matrix)
+chunk_size <- 50 #500
+overlap <- 0 #adjust #100
+
+feature_overlap_chunks <- generate_overlapping_chunks(num_features, chunk_size, overlap)
+
+list_of_coefficients <- list()
+list_of_models <- list()
+
+for (chunk_index in seq_along(feature_overlap_chunks)) {
+  chunk <- feature_overlap_chunks[[chunk_index]]  
+  
+  subset_expression_matrix <- expression_matrix[, chunk[1]:chunk[2]]
+  
+  # Set alpha to 1 to enforce Lasso regularization
+  alpha <- 1
+  
+  set.seed(123)
+  current_model <- cv.glmnet(
+    x = subset_expression_matrix,
+    y = response_variable,
+    alpha = alpha,
+    nfolds = 5,
+    family = "binomial",
+    parallel = TRUE,
+    standardize = FALSE
+  )
+  
+  # Choose lambda that gives more non-zero coefficients
+  co_min <- coef(current_model, s = current_model$lambda.min, exact = TRUE) 
+  co_1se <- coef(current_model, s = current_model$lambda.1se, exact = TRUE) 
+  
+  num_nonzero_min <- sum(co_min[, 1] != 0) 
+  num_nonzero_1se <- sum(co_1se[, 1] != 0) 
+  
+  if (num_nonzero_min > num_nonzero_1se) {
+    idealLambda <- current_model$lambda.min
+    best_coefs <- co_min
+  } else {
+    idealLambda <- current_model$lambda.1se
+    best_coefs <- co_1se
+  }
+  
+  # Extract selected genes based on chosen lambda
+  nonzero_coeffs <- names(best_coefs[best_coefs[, 1] != 0, ])
+  selected_gene <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+  list_of_coefficients[[paste0("chunk", chunk_index)]] <- selected_gene
+  list_of_models[[paste0("chunk", chunk_index)]] <- current_model
+  
+}
+
+list_of_coefficients
+all_genes <- unlist(list_of_coefficients)
+df_genes <- data.frame(gene = all_genes)
+selected_genes2 <- unique(df_genes$gene)
+selected_genes2 
+```
+
+```{r}
+#logTPM_50 <- t(Abundance_logTPM)[, selected_genes_50]
+
+#run lasso
+selected_genes_50 <- selected_genes2
+expression_matrix_50 <- expression_matrix[, selected_genes_50]
+
+# lasso 
+lassoModel_50 <- glmnet(x = expression_matrix_50, y = response_variable, alpha = 1, family = "binomial", standardize = FALSE)
+
+plot(lassoModel_50, xvar="lambda")
+summary(lassoModel_50)
+# Perform 5-fold cross-validation
+#got Warning: executing %dopar% sequentially: no parallel backend registered
+#install.packages("doParallel")
+#library(doParallel)
+#registerDoParallel(cores = 4) 
+set.seed(123)
+cv.lassoModel_50 <- cv.glmnet(x = expression_matrix_50, y = response_variable, alpha = 1, nfolds = 5, family = "binomial", parallel = TRUE, standardize = FALSE)
+
+idealLambda <- cv.lassoModel_50$lambda.min # Identify best predictors based on cross-validation
+idealLambda1se <- cv.lassoModel_50$lambda.1se
+# plot variable deviances vs. shrinkage parameter, λ (lambda)
+plot(cv.lassoModel_50)
+cat("Optimal Lambda:", idealLambda, "\n")
+cat("Optimal Lambda on 1se:", idealLambda1se, "\n")
+
+co_min <- coef(cv.lassoModel_50, s = idealLambda, exact = TRUE) # Derive coefficients for each gene
+co_1se <- coef(cv.lassoModel_50, s = idealLambda1se, exact = TRUE)
+
+  num_nonzero_min <- sum(co_min[, 1] != 0) 
+  num_nonzero_1se <- sum(co_1se[, 1] != 0) 
+  
+  if (num_nonzero_min > num_nonzero_1se) {
+    best_coefs <- co_min
+  } else {
+    best_coefs <- co_1se
+  }
+  
+nonzero_coefficients_50 <- best_coefs[best_coefs[, 1] != 0, ] # Print the non-zero coefficients
+gene_names <- names(nonzero_coefficients_50)
+cat("Non-zero Coefficients:\n", gene_names, "\n")
+```
+
+```{r}
+selected_genes <- gene_names[gene_names != "(Intercept)"]
+ensemblID <- selected_genes
+attributes <- c("ensembl_gene_id", "external_gene_name")
+ensemblMart <- useMart("ensembl", dataset="hsapiens_gene_ensembl")
+external_gene_names_50 <- getBM(attributes = attributes, filters = "ensembl_gene_id", values = selected_genes, mart = ensemblMart)
+
+common_genes <- intersect(external_gene_names_100, external_gene_names_50)
+
+
+TPM_metadata <- merge(as.data.frame(zMatrix_logTPM), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+
+
+genes_final_model <- paste(selected_genes, collapse = " + ")
+
+formula_str <- paste("response_variable ~", genes_final_model)
+
+finalModel_50 <- glm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  control = list(maxit = 1000))
+
+summary(finalModel_50)
+```
+
+```{r}
+library(arm)
+finalModel_bayes_2 <- bayesglm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"))
+display(finalModel_bayes_2)
+
+finalModel_bayes_sep_2 <- bayesglm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  method = "detect_separation")
+finalModel_bayes_sep_2
+```
+
+
+
+```{r}
+# 1. Confusion Matrix and Classification Metrics
+predicted <- predict(finalModel_50, type = "response") > 0.5
+conf_mat <- table(predicted, response_variable)
+conf_mat
+accuracy <- sum(diag(conf_mat)) / sum(conf_mat)
+precision <- conf_mat[2, 2] / sum(conf_mat[, 2])
+Sensitivity <- conf_mat[2, 2] / sum(conf_mat[2, ])
+specificity <- conf_mat[1, 1] / sum(conf_mat[1, ])
+accuracy
+precision
+Sensitivity
+specificity
+
+
+```
+```{r}
+library(pROC)
+roc <- roc(response_variable, fitted(finalModel_50), smooth=FALSE)
+auc <- ci.auc(roc)[2]
+plot.roc(
+  roc,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Final Lasso model 100 features/chunk\n Area under the curve (AUC):", round(auc, digits = 2))
+)
+```
+
+# compare chunk 100 with 50
+```{r}
+aic_finalModel_1 <- AIC(finalModel_100)
+aic_finalModel_2 <- AIC(finalModel_50)
+
+cat("AIC for finalModel_100:", aic_finalModel_1, "\n")
+cat("AIC for finalModel_50:", aic_finalModel_2, "\n")
+
+# Compare residual deviance
+residual_deviance_finalModel_1 <- finalModel_100$deviance
+residual_deviance_finalModel_2 <- finalModel_50$deviance
+
+cat("Residual deviance for finalModel_100:", residual_deviance_finalModel_1, "\n")
+cat("Residual deviance for finalModel_50:", residual_deviance_finalModel_2, "\n")
+```
+
+# lambda: min.lambda or 1se.lambda (gives more non-zero coefficients)
+
+```{r}
+library(RColorBrewer)
+selected_genes <- common_genes$ensembl_gene_id
+gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
+gene_zMatrix <- as.data.frame(gene_zMatrix)
+
+
+condition <- data.frame(coldata[, 1])
+colnames(condition)[1] <- "treatment"
+rownames(condition) <- colnames(gene_zMatrix)
+
+breaksList = seq(-3, 3, by = 0.06)
+
+p3 <- pheatmap(gene_zMatrix,
+               color = colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+               show_rownames = TRUE, 
+               cluster_cols = FALSE, 
+               cluster_rows = FALSE, 
+               annotation_col = condition, 
+               annotation_colors = list(treatment = c("0" = "lightpink", "1" = "lightgreen")),
+               cutree_rows = 2, 
+               cutree_cols = 2, 
+               fontsize_row = 7,
+               breaks = breaksList,
+               legend = TRUE
+)
+
+sorted <- coldata[order(coldata$treatment == '0', coldata$treatment), ]
+cluster_treatment <- as.data.frame(t(sorted[, c(1:4)]))
+
+gene_zMatrix_reordered <- gene_zMatrix[, match(names(cluster_treatment), names(gene_zMatrix))]
+
+condition_reordered <- data.frame(sorted[, 1])
+colnames(condition_reordered)[1] <- "treatment"
+rownames(condition_reordered) <- colnames(gene_zMatrix_reordered)
+
+p4 <- pheatmap(gene_zMatrix_reordered,
+               color = colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+               show_rownames = TRUE, 
+               cluster_cols = FALSE, 
+               cluster_rows = FALSE, 
+               annotation_col = condition_reordered, 
+               annotation_colors = list(treatment = c("0" = "lightpink", "1" = "lightgreen")),
+               cutree_rows = 2, 
+               cutree_cols = 2, 
+               fontsize_row = 7,
+               breaks = breaksList,
+               legend = TRUE
+)
+
+p4 
+```
+
+
+## Method 1: try different numbers of features in each chuck
+
+```{r}
+## 300 
+
+## 500 -->  [17] "ENSG00000105426" "ENSG00000152642" "ENSG00000152894" "ENSG00000153044" "ENSG00000154274" "ENSG00000155324" "ENSG00000155761" "ENSG00000156795" "ENSG00000156804" "ENSG00000163879" "ENSG00000164465" "ENSG00000164509" "ENSG00000164758" "ENSG00000184313" "ENSG00000253250" "ENSG00000255046" "ENSG00000287626"
+# warning: Computational singularities
+
+## 1300/1400 --> ENSG00000105426 
+## 1500 --> ENSG00000152894 ENSG00000155324 ENSG00000164465 ENSG00000164758 -->  Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+## 2000 --> ENSG00000152894 ENSG00000155324 ENSG00000164465 ENSG00000164758 ENSG00000166477 --> Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+
+#different chunk sizes
+all_selected_genes <- list()
+
+for (chunk_size in seq(300, 5000, by = 100)) {
+  
+  num_chunks <- ceiling(num_features / chunk_size)
+  feature_chunks <- lapply(seq(1, num_features, by = chunk_size), function(i) c(i, min(i + chunk_size - 1, num_features)))
+  
+  list_of_coefficients <- list()
+  
+  for (chunk_index in seq_along(feature_chunks)) {
+    chunk <- feature_chunks[[chunk_index]]
+    
+    subset_expression_matrix <- expression_matrix[, chunk[1]:chunk[2]]
+    
+    alpha <- 1 #lasso
+    
+    set.seed(123)
+    current_model <- cv.glmnet(
+      x = subset_expression_matrix,
+      y = response_variable,
+      alpha = alpha,
+      nfolds = 5,
+      family = "binomial",
+      parallel = TRUE,
+      standardize = FALSE
+    )
+    
+    #Choose lambda that gives more non-zero coefficients
+    co_min <- coef(current_model, s = current_model$lambda.min, exact = TRUE) 
+    co_1se <- coef(current_model, s = current_model$lambda.1se, exact = TRUE) 
+    
+    num_nonzero_min <- sum(co_min[, 1] != 0) 
+    num_nonzero_1se <- sum(co_1se[, 1] != 0) 
+    
+    if (num_nonzero_min > num_nonzero_1se) {
+      idealLambda <- current_model$lambda.min
+      best_coefs <- co_min
+    } else {
+      idealLambda <- current_model$lambda.1se
+      best_coefs <- co_1se
+    }
+    
+    nonzero_coeffs <- names(best_coefs[best_coefs[, 1] != 0, ])
+    selected_gene <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+    list_of_coefficients[[paste0("chunk", chunk_index)]] <- selected_gene
+  }
+  
+  all_selected_genes[[as.character(chunk_size)]] <- unique(unlist(list_of_coefficients))
+}
+
+final_selected_genes <- unlist(all_selected_genes)
+feature_frequency <- table(final_selected_genes) #frequency of each feature in different chunk sizes
+feature_frequency
+selected_genes1 <- names(feature_frequency[feature_frequency > 1])
+selected_genes1 #51
+
+```
+
+```{r}
+TPM_metadata <- merge(as.data.frame(zMatrix_logTPM), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+
+genes_final_model_1 <- paste(selected_genes1, collapse = " + ")
+
+formula_str <- paste("response_variable ~", genes_final_model_1)
+
+finalModel_1 <- glm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  control = list(maxit = 1000))
+
+summary(finalModel_1)
+```
+
+```{r}
+library(arm)
+#reference paper: Convergence Failures in Logistic Regression 
+finalModel_bayes_1 <- bayesglm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"))
+display(finalModel_bayes_1)
+
+finalModel_bayes_sep_1 <- bayesglm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  method = "detect_separation")
+finalModel_bayes_sep_1
+```
+
+```{r}
+# 1. Confusion Matrix and Classification Metrics
+predicted <- predict(finalModel_bayes_1, type = "response") > 0.5
+conf_mat <- table(predicted, response_variable)
+conf_mat
+accuracy <- sum(diag(conf_mat)) / sum(conf_mat)
+precision <- conf_mat[2, 2] / sum(conf_mat[, 2])
+Sensitivity <- conf_mat[2, 2] / sum(conf_mat[2, ])
+specificity <- conf_mat[1, 1] / sum(conf_mat[1, ])
+accuracy
+precision
+Sensitivity
+specificity
+
+
+```
+
+```{r}
+library(pROC)
+roc <- roc(response_variable, fitted(finalModel_bayes_1), smooth=FALSE)
+auc <- ci.auc(roc)[2]
+plot.roc(
+  roc,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Final Lasso model\n Area under the curve (AUC):", round(auc, digits = 2))
+)
+
+```
+
+## Method 2: add overlapping in each chuncks (500/chunk)
+```{r}
+generate_overlapping_chunks <- function(num_features, chunk_size, overlap) {
+  num_chunks <- ceiling(num_features / (chunk_size - overlap))
+  chunk_starts <- seq(1, num_features, by = chunk_size - overlap)
+  chunk_ends <- pmin(chunk_starts + chunk_size - 1, num_features)
+  chunks <- lapply(1:num_chunks, function(i) c(chunk_starts[i], chunk_ends[i]))
+  return(chunks)
+}
+
+num_features <- ncol(expression_matrix)
+chunk_size <- 500 #500
+overlap <- 200 #adjust #100
+
+feature_overlap_chunks <- generate_overlapping_chunks(num_features, chunk_size, overlap)
+
+```
+
+```{r}
+list_of_coefficients <- list()
+list_of_models <- list()
+
+for (chunk_index in seq_along(feature_overlap_chunks)) {
+  chunk <- feature_overlap_chunks[[chunk_index]]  
+  
+  subset_expression_matrix <- expression_matrix[, chunk[1]:chunk[2]]
+  
+  # Set alpha to 1 to enforce Lasso regularization
+  alpha <- 1
+  
+  set.seed(123)
+  current_model <- cv.glmnet(
+    x = subset_expression_matrix,
+    y = response_variable,
+    alpha = alpha,
+    nfolds = 5,
+    family = "binomial",
+    parallel = TRUE,
+    standardize = FALSE
+  )
+  
+  # Choose lambda that gives more non-zero coefficients
+  co_min <- coef(current_model, s = current_model$lambda.min, exact = TRUE) 
+  co_1se <- coef(current_model, s = current_model$lambda.1se, exact = TRUE) 
+  
+  num_nonzero_min <- sum(co_min[, 1] != 0) 
+  num_nonzero_1se <- sum(co_1se[, 1] != 0) 
+  
+  if (num_nonzero_min > num_nonzero_1se) {
+    idealLambda <- current_model$lambda.min
+    best_coefs <- co_min
+  } else {
+    idealLambda <- current_model$lambda.1se
+    best_coefs <- co_1se
+  }
+  
+  # Extract selected genes based on chosen lambda
+  nonzero_coeffs <- names(best_coefs[best_coefs[, 1] != 0, ])
+  selected_gene <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+  list_of_coefficients[[paste0("chunk", chunk_index)]] <- selected_gene
+  list_of_models[[paste0("chunk", chunk_index)]] <- current_model
+  
+}
+
+list_of_coefficients
+all_genes <- unlist(list_of_coefficients)
+df_genes <- data.frame(gene = all_genes)
+selected_genes2 <- unique(df_genes$gene)
+selected_genes2 #49 when overlap is 100; 59 when overlap is 200, 75 when overlap is 300
+
+#common_genes <- intersect(selected_genes2, selected_genes1) #32 when overlap is 100; 31 when overlap is 200, 36 when overlap is 300
+
+#no overlap: 
+
+```
+
+```{r}
+#run lasso
+selected_genes_100 <- selected_genes2
+expression_matrix_100 <- expression_matrix[, selected_genes_100]
+
+# lasso 
+lassoModel_100 <- glmnet(x = expression_matrix_100, y = response_variable, alpha = 1, family = "binomial", standardize = FALSE)
+
+plot(lassoModel_100, xvar="lambda")
+summary(lassoModel_100)
+# Perform 5-fold cross-validation
+#got Warning: executing %dopar% sequentially: no parallel backend registered
+#install.packages("doParallel")
+#library(doParallel)
+#registerDoParallel(cores = 4) 
+set.seed(123)
+cv.lassoModel_100 <- cv.glmnet(x = expression_matrix_100, y = response_variable, alpha = 1, nfolds = 5, family = "binomial", parallel = TRUE, standardize = FALSE)
+
+idealLambda <- cv.lassoModel_100$lambda.min # Identify best predictors based on cross-validation
+idealLambda1se <- cv.lassoModel_100$lambda.1se
+# plot variable deviances vs. shrinkage parameter, λ (lambda)
+plot(cv.lassoModel_100)
+cat("Optimal Lambda:", idealLambda, "\n")
+cat("Optimal Lambda on 1se:", idealLambda1se, "\n")
+
+co_min <- coef(cv.lassoModel_100, s = idealLambda, exact = TRUE) # Derive coefficients for each gene
+co_1se <- coef(cv.lassoModel_100, s = idealLambda1se, exact = TRUE)
+
+  num_nonzero_min <- sum(co_min[, 1] != 0) 
+  num_nonzero_1se <- sum(co_1se[, 1] != 0) 
+  
+  if (num_nonzero_min > num_nonzero_1se) {
+    best_coefs <- co_min
+  } else {
+    best_coefs <- co_1se
+  }
+  
+
+nonzero_coefficients_100 <- best_coefs[best_coefs[, 1] != 0, ] # Print the non-zero coefficients
+gene_names <- names(nonzero_coefficients_100)
+cat("Non-zero Coefficients:\n", gene_names, "\n")
+```
+
+```{r}
+TPM_metadata <- merge(as.data.frame(zMatrix_logTPM), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+
+genes_final_model_2 <- paste(selected_genes2, collapse = " + ")
+
+formula_str <- paste("response_variable ~", genes_final_model_2)
+
+finalModel_2 <- glm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  control = list(maxit = 1000))
+
+summary(finalModel_2)
+```
+
+```{r}
+finalModel_bayes_2 <- bayesglm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"))
+display(finalModel_bayes_2)
+
+finalModel_bayes_sep_2 <- bayesglm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  method = "detect_separation")
+finalModel_bayes_sep_2
+```
+
+
+
+```{r}
+# 1. Confusion Matrix and Classification Metrics
+predicted <- predict(finalModel_2, type = "response") > 0.5
+conf_mat <- table(predicted, response_variable)
+conf_mat
+accuracy <- sum(diag(conf_mat)) / sum(conf_mat)
+precision <- conf_mat[2, 2] / sum(conf_mat[, 2])
+Sensitivity <- conf_mat[2, 2] / sum(conf_mat[2, ])
+specificity <- conf_mat[1, 1] / sum(conf_mat[1, ])
+accuracy
+precision
+Sensitivity
+specificity
+
+
+```
+
+```{r}
+library(pROC)
+roc <- roc(response_variable, fitted(finalModel_bayes_2), smooth=FALSE)
+auc <- ci.auc(roc)[2]
+plot.roc(
+  roc,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Final Lasso model\n Area under the curve (AUC):", round(auc, digits = 2))
+)
+
+```
+
+# lambda: choose less stringent lambda in chunks with overlapping features 
+## Method 3: select the lambda with the lowest cross-validated error that is below the 5th percentile, and maximize the number of non-zero coefficients
+
+### 500 features/chunk with overlap 200
+```{r}
+chunk_size <- 500
+overlap <- 200 #adjust
+
+feature_overlap_chunks <- generate_overlapping_chunks(num_features, chunk_size, overlap)
+
+list_of_coefficients_5cvm <- list()
+list_of_models_5cvm <- list()
+
+for (chunk_index in seq_along(feature_overlap_chunks)) {
+  chunk <- feature_overlap_chunks[[chunk_index]]
+  
+  subset_expression_matrix <- expression_matrix[, chunk[1]:chunk[2]]
+  
+  # Set alpha to 1 to enforce Lasso regularization
+  alpha <- 1
+  
+  set.seed(123)
+  current_model <- cv.glmnet(
+    x = subset_expression_matrix,
+    y = response_variable,
+    alpha = alpha,
+    nfolds = 5,
+    family = "binomial",
+    parallel = TRUE,
+    standardize = FALSE
+  )
+  
+  # 5th percentile of the cross-validated error (cvm)
+  cvm_top_percent <- quantile(current_model$cvm, probs = 0.05)
+  
+  # Initialize variables 
+  best_lambda <- NULL
+  best_num_nonzero <- 0
+  best_coefs <- NULL
+  
+  #Iterate over lambda values
+  #select the lambda with the lowest cross-validated error that is below the 5th percentile, and maximize the number of non-zero coefficients
+for (lambda in current_model$lambda) {
+  co_lambda <- coef(current_model, s = lambda, exact = TRUE)
+  num_nonzero <- sum(co_lambda[-1, 1] != 0) 
+  
+  if (current_model$cvm[which.min(current_model$cvm)] <= cvm_top_percent) {
+    if (num_nonzero > best_num_nonzero) {
+      best_num_nonzero <- num_nonzero
+      best_lambda <- lambda
+      best_coefs <- co_lambda
+    }
+  }
+}
+
+  
+  if (!is.null(best_lambda)) {
+    nonzero_coeffs <- names(best_coefs[best_coefs[, 1] != 0, ])
+    selected_gene <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+    list_of_coefficients_5cvm[[paste0("chunk", chunk_index)]] <- selected_gene
+    list_of_models_5cvm[[paste0("chunk", chunk_index)]] <- current_model
+  }
+}
+
+all_genes <- unlist(list_of_coefficients_5cvm)
+df_genes <- data.frame(gene = all_genes)
+selected_genes3 <- unique(df_genes$gene)
+
+#features = 500/chunk --> 1345 when overlap is 100; 1558 when overlap is 200; 1897 when overlap is 300
+
+#common_genes <- intersect(selected_genes3, selected_genes1) # 47 when overlap is 100, 49 when overlap is 200; 48 when overlap is 300
+
+# selected_genes3 has 1558 genes
+# choose overlap = 200
+```
+
+### 1000 features/chunk with overlap 500
+```{r}
+chunk_size <- 1000
+overlap <- 500 #adjust
+
+feature_overlap_chunks <- generate_overlapping_chunks(num_features, chunk_size, overlap)
+
+list_of_coefficients_5cvm <- list()
+list_of_models_5cvm <- list()
+
+for (chunk_index in seq_along(feature_overlap_chunks)) {
+  chunk <- feature_overlap_chunks[[chunk_index]]
+  
+  subset_expression_matrix <- expression_matrix[, chunk[1]:chunk[2]]
+  
+  # Set alpha to 1 to enforce Lasso regularization
+  alpha <- 1
+  
+  set.seed(123)
+  current_model <- cv.glmnet(
+    x = subset_expression_matrix,
+    y = response_variable,
+    alpha = alpha,
+    nfolds = 5,
+    family = "binomial",
+    parallel = TRUE,
+    standardize = FALSE
+  )
+  
+  # 5th percentile of the cross-validated error (cvm)
+  cvm_top_percent <- quantile(current_model$cvm, probs = 0.05)
+  
+  # Initialize variables 
+  best_lambda <- NULL
+  best_num_nonzero <- 0
+  best_coefs <- NULL
+  
+  #Iterate over lambda values
+  #select the lambda with the lowest cross-validated error that is below the 5th percentile, and maximize the number of non-zero coefficients
+for (lambda in current_model$lambda) {
+  co_lambda <- coef(current_model, s = lambda, exact = TRUE)
+  num_nonzero <- sum(co_lambda[-1, 1] != 0) 
+  
+  if (current_model$cvm[which.min(current_model$cvm)] <= cvm_top_percent) {
+    if (num_nonzero > best_num_nonzero) {
+      best_num_nonzero <- num_nonzero
+      best_lambda <- lambda
+      best_coefs <- co_lambda
+    }
+  }
+}
+
+  
+  if (!is.null(best_lambda)) {
+    nonzero_coeffs <- names(best_coefs[best_coefs[, 1] != 0, ])
+    selected_gene <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+    list_of_coefficients_5cvm[[paste0("chunk", chunk_index)]] <- selected_gene
+    list_of_models_5cvm[[paste0("chunk", chunk_index)]] <- current_model
+  }
+}
+
+all_genes <- unlist(list_of_coefficients_5cvm)
+df_genes <- data.frame(gene = all_genes)
+selected_genes4 <- unique(df_genes$gene)
+
+#features = 1000/chunk --> 721 when overlap is 300; 882 when overlap is 500; 1063 when overlap is 700
+#common_genes <- intersect(selected_genes4, selected_genes1) # 45 when overlap is 300; 48 when overlap is 500; 49 when overlap is 700
+
+#choose overlapping = 500
+common_genes_500_1000 <- intersect(selected_genes4, selected_genes3) #694 
+
+```
+
+### run lasso in chunk 500 features
+```{r}
+subset_expression_matrix_500 <- expression_matrix[, selected_genes3] #1558
+
+lassoModel_500 <- glmnet(x = subset_expression_matrix_500, y = response_variable, alpha = 1, family = "binomial", standardize = FALSE)
+
+plot(lassoModel_500, xvar="lambda")
+summary(lassoModel_500)
+# Perform 5-fold cross-validation
+set.seed(123)
+cv.lassoModel <- cv.glmnet(x = subset_expression_matrix_500, y = response_variable, alpha = 1, nfolds = 5, family = "binomial", parallel = TRUE, standardize = FALSE)
+
+idealLambda <- cv.lassoModel$lambda.min # Identify best predictors based on cross-validation
+idealLambda1se <- cv.lassoModel$lambda.1se
+# plot variable deviances vs. shrinkage parameter, λ (lambda)
+plot(cv.lassoModel)
+cat("Optimal Lambda:", idealLambda, "\n")
+cat("Optimal Lambda on 1se:", idealLambda1se, "\n")
+
+# derive coefficients for each gene
+co <- coef(cv.lassoModel, s = idealLambda, exact = TRUE) # Derive coefficients for each gene
+co.se <- coef(cv.lassoModel, s = idealLambda1se, exact = TRUE)
+
+co.se[co.se[,1]!=0,]
+co[co[,1]!=0,]
+nonzero_coefficients_500 <- co[co[, 1] != 0, ] # Print the non-zero coefficients
+gene_names_500 <- names(nonzero_coefficients_500)
+cat("Non-zero Coefficients:\n", gene_names_500, "\n")
+
+```
+
+### run lasso in chunk 1000 features
+```{r}
+subset_expression_matrix_1000 <- expression_matrix[, selected_genes4] #882
+
+lassoModel_1000 <- glmnet(x = subset_expression_matrix_1000, y = response_variable, alpha = 1, family = "binomial", standardize = FALSE)
+
+plot(lassoModel_1000, xvar="lambda")
+summary(lassoModel_1000)
+# Perform 5-fold cross-validation
+set.seed(123)
+cv.lassoModel <- cv.glmnet(x = subset_expression_matrix_1000, y = response_variable, alpha = 1, nfolds = 5, family = "binomial", parallel = TRUE, standardize = FALSE)
+
+idealLambda <- cv.lassoModel$lambda.min # Identify best predictors based on cross-validation
+idealLambda1se <- cv.lassoModel$lambda.1se
+# plot variable deviances vs. shrinkage parameter, λ (lambda)
+plot(cv.lassoModel)
+cat("Optimal Lambda:", idealLambda, "\n")
+cat("Optimal Lambda on 1se:", idealLambda1se, "\n")
+
+# derive coefficients for each gene
+co <- coef(cv.lassoModel, s = idealLambda, exact = TRUE) # Derive coefficients for each gene
+co.se <- coef(cv.lassoModel, s = idealLambda1se, exact = TRUE)
+
+co.se[co.se[,1]!=0,]
+co[co[,1]!=0,]
+nonzero_coefficients_1000 <- co[co[, 1] != 0, ] # Print the non-zero coefficients
+gene_names_1000 <- names(nonzero_coefficients_1000)
+cat("Non-zero Coefficients:\n", gene_names_1000, "\n")
+
+```
+
+```{r}
+selected_gene_1000 <- gene_names_1000[gene_names_1000 != "(Intercept)"]
+selected_gene_500 <- gene_names_500[gene_names_500 != "(Intercept)"]
+final_common_genes <- intersect(selected_gene_1000, selected_gene_500)
+
+# chunk 500 and 1000 give same genes for the final model
+genes_final_model_3 <- paste(selected_gene_500, collapse = " + ")
+  
+formula_str <- paste("response_variable ~", genes_final_model_3)
+TPM_metadata <- merge(as.data.frame(zMatrix_logTPM), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+finalModel_3 <- glm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  control = list(maxit = 1000))
+
+summary(finalModel_3)
+```
+
+```{r}
+
+ensemblID <- final_common_genes
+attributes <- c("ensembl_gene_id", "external_gene_name")
+ensemblMart <- useMart("ensembl", dataset="hsapiens_gene_ensembl")
+external_gene_names <- getBM(attributes = attributes, filters = "ensembl_gene_id", values = final_common_genes, mart = ensemblMart)
+
+
+library(RColorBrewer)
+selected_genes <- external_gene_names $ensembl_gene_id
+gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
+gene_zMatrix <- as.data.frame(gene_zMatrix)
+
+
+condition <- data.frame(coldata[, 1])
+colnames(condition)[1] <- "treatment"
+rownames(condition) <- colnames(gene_zMatrix)
+
+breaksList = seq(-3, 3, by = 0.06)
+
+p3 <- pheatmap(gene_zMatrix,
+               color = colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+               show_rownames = TRUE, 
+               cluster_cols = FALSE, 
+               cluster_rows = FALSE, 
+               annotation_col = condition, 
+               annotation_colors = list(treatment = c("0" = "lightpink", "1" = "lightgreen")),
+               cutree_rows = 2, 
+               cutree_cols = 2, 
+               fontsize_row = 7,
+               breaks = breaksList,
+               legend = TRUE
+)
+
+sorted <- coldata[order(coldata$treatment == '0', coldata$treatment), ]
+cluster_treatment <- as.data.frame(t(sorted[, c(1:4)]))
+
+gene_zMatrix_reordered <- gene_zMatrix[, match(names(cluster_treatment), names(gene_zMatrix))]
+
+condition_reordered <- data.frame(sorted[, 1])
+colnames(condition_reordered)[1] <- "treatment"
+rownames(condition_reordered) <- colnames(gene_zMatrix_reordered)
+
+p4 <- pheatmap(gene_zMatrix_reordered,
+               color = colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+               show_rownames = TRUE, 
+               cluster_cols = FALSE, 
+               cluster_rows = FALSE, 
+               annotation_col = condition_reordered, 
+               annotation_colors = list(treatment = c("0" = "lightpink", "1" = "lightgreen")),
+               cutree_rows = 2, 
+               cutree_cols = 2, 
+               fontsize_row = 7,
+               breaks = breaksList,
+               legend = TRUE
+)
+
+p4 
+```
+
+```{r}
+# 1. Confusion Matrix and Classification Metrics
+predicted <- predict(finalModel_3, type = "response") > 0.5
+conf_mat <- table(predicted, response_variable)
+conf_mat
+accuracy <- sum(diag(conf_mat)) / sum(conf_mat)
+precision <- conf_mat[2, 2] / sum(conf_mat[, 2])
+Sensitivity <- conf_mat[2, 2] / sum(conf_mat[2, ])
+specificity <- conf_mat[1, 1] / sum(conf_mat[1, ])
+accuracy
+precision
+Sensitivity
+specificity
+
+
+```
+
+```{r}
+library(pROC)
+roc <- roc(response_variable, fitted(finalModel_3), smooth=FALSE)
+auc <- ci.auc(roc)[2]
+plot.roc(
+  roc,
+  grid = TRUE,
+  grid.lwd = 2,
+  col = "royalblue",
+  main = paste("Final Lasso model\n Area under the curve (AUC):", round(auc, digits = 2))
+)
+
+```
+
+### Compare 3 models
+```{r}
+aic_finalModel_1 <- AIC(finalModel_bayes_1)
+aic_finalModel_2 <- AIC(finalModel_bayes_2)
+aic_finalModel_3 <- AIC(finalModel_3)
+
+cat("AIC for finalModel_1:", aic_finalModel_1, "\n")
+cat("AIC for finalModel_2:", aic_finalModel_2, "\n")
+cat("AIC for finalModel_3:", aic_finalModel_3, "\n")
+
+# Compare residual deviance
+residual_deviance_finalModel_1 <- finalModel_bayes_1$deviance
+residual_deviance_finalModel_2 <- finalModel_bayes_2$deviance
+residual_deviance_finalModel_3 <- finalModel_3$deviance
+
+cat("Residual deviance for finalModel_1:", residual_deviance_finalModel_1, "\n")
+cat("Residual deviance for finalModel_2:", residual_deviance_finalModel_2, "\n")
+cat("Residual deviance for finalModel_3:", residual_deviance_finalModel_3, "\n")
+```
+
+
+```{r}
+subset_expression_matrix <- expression_matrix[, selected_genes5] #782
+
+list.of.fits <- list()
+for (i in 1:10) {
+  fit.name <- paste0("alpha", i/10)
+  set.seed(123)
+  list.of.fits[[fit.name]] <-
+    cv.glmnet(x = subset_expression_matrix, y = response_variable, alpha = i/10, nfolds = 5, family = "binomial", parallel = TRUE, standardize = FALSE)
+}
+list.of.fits
+
+best_alpha <- NULL
+best_lambda <- NULL
+min_deviance <- Inf
+best_model <- NULL
+
+for (i in 1:10) {
+  fit.name <- paste0("alpha", i/10)
+  current_fit <- list.of.fits[[fit.name]]
+#cvm: mean cross-validated error ~~ minimum deviance: model's performance averaged over different folds and lambda values.
+  min_index <- which.min(current_fit$cvm)
+  if (current_fit$cvm[min_index] < min_deviance) {
+    min_deviance <- current_fit$cvm[min_index]
+    best_alpha <- i/10
+    best_lambda <- current_fit$lambda[min_index]
+    best_model <- current_fit
+  }
+}
+
+cat("Best Alpha:", best_alpha, "\n")
+cat("Best Lambda:", best_lambda, "\n")
+cat("Minimum Cross-Validated Deviance:", min_deviance, "\n")
+
+best_coefs <- coef(best_model, s = best_lambda)
+nonzero_coeffs <- names(best_coefs[best_coefs[, 1] != 0, ])
+selected_gene <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+
+# Print non-zero coefficients for the best model
+cat("Non-zero Coefficients for the Best Model:\n", nonzero_coeffs, "\n")
+
+
+```
+```{r}
+selected_gene <- nonzero_coeffs[nonzero_coeffs != "(Intercept)"]
+
+TPM_metadata <- merge(as.data.frame(zMatrix_logTPM), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+
+genes_final_model <- paste(selected_gene, collapse = " + ")
+
+formula_str <- paste("response_variable ~", genes_final_model)
+
+```
+
+```{r}
+genes_final_model <- paste(df_unique_genes$Gene, collapse = " + ")
+TPM_metadata <- merge(as.data.frame(zMatrix_logTPM[, subset_genes]), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+
+formula_str <- paste("response_variable ~", genes_final_model)
+
+finalmodel <- glm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  control = list(maxit = 1000))
+summary(finalmodel)
+```
+```{r}
+library("detectseparation")
+
+finalLasso_sep <- glm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  method = "detect_separation")
+finalLasso_sep
+# Check for perfect separation
+# the actual maximum likelihood estimates
+
+coef(finalmodel) + coef(finalLasso_sep)
+coef(summary(finalmodel))[, "Std. Error"] + abs(coef(finalLasso_sep))
+```
+
+```{r}
+library(arm)
+#reference paper: Convergence Failures in Logistic Regression 
+finalLasso_bayes <- bayesglm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"))
+display(finalLasso_bayes)
+
+finalLasso_bayes_sep <- bayesglm(formula_str,
+                  data = as.data.frame(TPM_metadata),
+                  family = binomial(link = "logit"),
+                  method = "detect_separation")
+finalLasso_bayes_sep
+```
+

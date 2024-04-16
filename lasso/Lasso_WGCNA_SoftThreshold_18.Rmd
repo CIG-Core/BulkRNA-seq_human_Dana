@@ -1,0 +1,558 @@
+---
+title: "Lasso_WGCNA_SoftThreshold_18"
+author:
+- name: "Computational Immunogenomics Core (CIG Core)"
+  affiliation: "Center for Systems Immunology, University of Pittsburgh"
+  email: "sis186@pitt.edu"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 3  # upto three depths of headings (specified by #, ## and ###)
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    number_sections: true  ## if you want number sections at each table header
+    theme: "default" # many options for theme, this one is my favorite.
+    highlight: tango  # specifies the syntax highlighting style
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+## Libraries
+suppressMessages({
+  library(openxlsx)
+  library(biomaRt)
+  library(stringr)
+  library(matrixStats)
+  library(pheatmap)
+  library(dplyr)
+  library(ggfortify)
+  library(org.Hs.eg.db)
+  library(WebGestaltR)
+  library(DESeq2)
+  library(apeglm)
+  library(EnhancedVolcano)
+  library('janitor') #use the function: row_to_names
+})
+
+library("RNAseqQC")
+library("ensembldb")
+library("dplyr")
+library("ggplot2")
+library("purrr")
+library("tidyr")
+library("tibble")
+library("magrittr")
+library(DEGreport)
+library(writexl)
+library("glmnet")
+library("caret")  # For cv.glmnet function
+## Sourcing
+source("/ix/cigcore/utils/code/de.heatmap.R")
+library(brglm)
+library(tximport)
+library(sleuth)
+library(dplyr)
+library(VennDiagram)
+library(AnnotationDbi)
+library(enrichplot)
+library(tidyverse)
+library(cowplot) #plot_grid
+library(glmnet)
+library(doParallel)
+registerDoParallel(cores = 4) 
+library(nestedcv)
+## Set paths
+proj_path <- "/ix/cigcore/proj/biswas"
+data_path <- file.path(proj_path, "data", "Ascherman_TotalRNA_07_20_2023")
+resPath <- gsub(pattern="data", replacement="result", data_path)
+experiment <- "3-28-Lasso_WGCNA"
+experimentPath <- file.path(resPath, experiment)
+dir.create(experimentPath, showWarnings = TRUE, recursive = TRUE)
+#metadata_path <- file.path(data_path, "metadata_remove_unpaired_low_align.csv")
+#dir.create(webgestalt_path, recursive=TRUE)
+metadata_path <- file.path(data_path, "all_metadata_remove_unpaired_low_align.csv") 
+```
+
+
+```{r count, include=FALSE, echo=FALSE}
+coldata <- read.csv(file.path(metadata_path), row.names = 1) #Metadata
+coldata$sample <- rownames(coldata)  # new variable:sample = rownames in 'coldata'
+#coldata <- coldata[ , c("sample", "treatment")]
+coldata$treatment <- ifelse(coldata$treatment == "Pre", 0, 1)
+coldata$treatment <- factor(coldata$treatment)
+coldata$age_group <- factor(coldata$age_group)
+```
+
+ 
+
+```{r, echo=FALSE}
+RSEM_path <- file.path(resPath, "rsem_counts")
+rsem_files <- list.files(RSEM_path, pattern = "quant_star-rsem.genes.results", full.names = TRUE)
+sample_names <- sapply(strsplit(basename(rsem_files), "_"), function(x) paste(x[1:4], collapse = "_"))
+names(rsem_files) <- sample_names
+
+txi.rsem <- tximport(rsem_files, type = "rsem", txIn = FALSE, txOut = FALSE) #txIn/Out = FALSE --> gene-level
+# Still have 60708 genes (stay the same number after removing version number     + duplicates)
+
+#filter length: remove 0-length values
+txi.rsem$abundance <-
+  txi.rsem$abundance[apply(txi.rsem$length,
+                                1,
+                                function(row) all(row !=0 )),]
+# keep counts have same number of levels as abundance 
+txi.rsem$counts <-
+  txi.rsem$counts[apply(txi.rsem$length,
+                                1,
+                                function(row) all(row !=0 )),]
+# align samples: make sure rownames of txi.rsem correspond to sample names in coldata
+counts <- as.data.frame(txi.rsem$counts)
+counts <- counts[, rownames(coldata)]
+# filter genes with sum of counts >= 10 in all samples 
+# filtered_counts <- counts[rowSums(counts) >= 10, ] #29221
+
+# remove genes with counts < 10 in over half of samples
+remove_low_counts <- counts[rowSums(counts >= 10) >= 12, ] # 16941
+
+nzv_genes <- nearZeroVar(t(remove_low_counts)) #didn't find any non-zero variance genes
+
+# remove genes with a high frequency of zeros counts (0 count in over 20% of the samples)
+remove_high_0_counts <- remove_low_counts[rowSums(remove_low_counts == 0) <= 0.2 * ncol(remove_low_counts), ] #16895
+
+filtered_counts <- remove_high_0_counts
+
+subset_abundance <- txi.rsem$abundance[rownames(filtered_counts), ]
+tximport_TPM <- as.data.frame(subset_abundance) 
+tximport_TPM <- tximport_TPM[, rownames(coldata)]
+
+#check if there is any overlapping
+#common_genes <- intersect(rownames(tximport_TPM), rownames(res_LRT))
+#nrow(tximport_TPM)  #16895
+#nrow(res_LRT) #19395
+#length(common_genes) #16895
+
+tximport_TPM$ensembl_gene_id_version <- rownames(tximport_TPM)
+rownames(tximport_TPM) <- NULL
+tximport_TPM$ensembl_gene_id <- sub("\\.\\d+$", "", tximport_TPM$ensembl_gene_id_version)
+rownames(tximport_TPM) <- tximport_TPM$ensembl_gene_id
+
+tximport_TPM <- tximport_TPM[, c(-25, -26)]
+tximport_TPM <- tximport_TPM[(!duplicated(rownames(tximport_TPM))), ]
+
+tximport_TPM[, 1:ncol(tximport_TPM)] <- sapply(tximport_TPM[, 1:ncol(tximport_TPM)], as.numeric) #convert it to numeric factors
+# all(colnames(tximport_TPM) %in% rownames(coldata)) # checking to see if sample names match between the two files
+# all(colnames(tximport_TPM) == rownames(coldata)) # checking to see if the sample names are in the same order in both files
+```
+
+
+
+
+```{r, echo=FALSE}
+logTPM <- function(x) {return(log2(x+1))}
+Abundance_logTPM <- tximport_TPM %>% mutate_if(is.numeric, logTPM)
+row_std <- apply(Abundance_logTPM, 1, sd, na.rm = TRUE)
+row_means <- rowMeans(Abundance_logTPM, na.rm = TRUE)
+zMatrix <- (Abundance_logTPM - row_means) / row_std
+zMatrix[is.na(zMatrix)] <- 0
+zMatrix_logTPM <- t(zMatrix)
+```
+
+
+
+```{r, echo=FALSE}
+gene_variances <- apply(zMatrix_logTPM, 2, var)
+ordered_genes <- names(sort(gene_variances, decreasing = TRUE))
+TPM_ordered_variance <- zMatrix_logTPM[, ordered_genes]
+```
+
+# Sample Metadata
+
+```{r metadata, echo=FALSE}
+sampleInfo <- coldata
+numSamples <- dim(sampleInfo)[1]
+sampleInfo$Sequence <- seq_len(nrow(sampleInfo))
+rownames(sampleInfo) <- NULL
+knitr::kable(sampleInfo)
+```
+
+# WGCNA result
+
+> Soft threshold = 18
+
+soft threshold = **18**
+	
+![](/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/3-25-2023-WGCNA/thumbnail_image_18.png){width=60%}.
+
+> Modules = 35
+
+**35** modules in total
+
+![](/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/3-25-2023-WGCNA/module_18.png){width=70%}.
+ 
+ 
+ 
+|  Positive modules | Spearman correlation (p-value) | 
+| ------------- |:-------------:| 
+|  **grey60 (149 genes)** | 0.14 (0.09)  
+
+
+
+
+|  Negative modules | Spearman correlation (p-value) | 
+| ------------- |:-------------:| 
+|  **tan (464 genes)** | -0.11 (0.2)  | 
+|  **saddlebrown (39 genes)** | -0.1 (0.2) | 
+
+ 
+
+
+
+```{r, out.width = '70%'}
+knitr::include_graphics("/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/3-25-2023-WGCNA/heatmap_SoftThreshold_18.png")
+```
+
+
+
+
+```{r, echo=FALSE}
+#X: expression matrix
+expression_matrix <- as.matrix(TPM_ordered_variance)
+#Y: response variable 
+response_variable <- coldata$treatment
+response_variable <- as.factor(response_variable)
+```
+
+```{r, echo=FALSE}
+file_path_grey60 <- "/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/3-25-2023-WGCNA/module_csv_SoftThreshold_18/grey60.csv"
+file_path_tan <- "/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/3-25-2023-WGCNA/module_csv_SoftThreshold_18/tan.csv"
+file_path_saddlebrown <- "/ix/cigcore/proj/biswas/result/Ascherman_TotalRNA_07_20_2023/3-25-2023-WGCNA/module_csv_SoftThreshold_18/saddlebrown.csv"
+
+positive <- read.csv(file_path_grey60) #149
+negative_1 <- read.csv(file_path_tan) #464
+negative_2 <- read.csv(file_path_saddlebrown) #39
+
+positive_expression_matrix <- expression_matrix[,positive$gene] #grey60: 149
+negative_expression_matrix_1 <- expression_matrix[,negative_1$gene] #tan: 464
+negative_expression_matrix_2 <- expression_matrix[,negative_2$gene] #saddlebrown: 39
+```
+
+# Run LASSO on treatment-positive modules (Module grey60: 149 genes)
+
+* Alpha = 1
+
+* Nested cross validation
+
+     + outer loop method: leave-one-out
+     + inner loop method: leave-one-out
+ 
+```{r}
+  alpha <- 1
+  
+  set.seed(123)
+  
+ lassoModel <- glmnet(x = positive_expression_matrix, y = response_variable, alpha = alpha, family = "binomial", standardize = FALSE)
+
+#  plot(lassoModel, xvar="lambda")
+# summary(lassoModel)
+
+  
+  
+   n_outer_folds <- length(response_variable)  # LOOCV
+    n_inner_folds <- 23 # LOOCV
+    outer_folds <- lapply(1:length(response_variable), function(i) i)
+    
+    set.seed(123)
+    nested_cv_result <- nestcv.glmnet(
+      y = response_variable, 
+      x = positive_expression_matrix, 
+      family = "binomial",
+      outer_method = "LOOCV", 
+      n_inner_folds = n_inner_folds,
+      outer_folds = outer_folds, 
+      alphaSet = 1,
+      finalCV = TRUE
+    )
+    
+    # Get the lambda value, model and non-zero coefficients selected during cross-validation
+    best_lambda <- nested_cv_result$final_param["lambda"]
+    best_lambda_value <- as.numeric(best_lambda)
+    current_model <- nested_cv_result$final_fit
+    non_zero_coefficients <- rownames(nested_cv_result[["final_coef"]])[-1]
+  
+  cat("Tuned lambda value:\n", best_lambda_value, "\n")
+  current_model
+  cat("Non-zero Coefficients:\n", non_zero_coefficients, "\n")
+
+  gene_positive <- non_zero_coefficients
+  
+
+```
+## Gene list with non-zero coeffients (5 genes)
+
+```{r}
+
+ensemblID <- gene_positive
+attributes <- c("ensembl_gene_id", "external_gene_name")
+ensemblMart <- useMart("ensembl", dataset="hsapiens_gene_ensembl")
+external_gene_names_positive <- getBM(attributes = attributes, filters = "ensembl_gene_id", values = gene_positive, mart = ensemblMart)
+
+external_gene_names_positive$external_gene_name <- ifelse(external_gene_names_positive$external_gene_name == "", 
+                                                     external_gene_names_positive$ensembl_gene_id, 
+                                                   external_gene_names_positive$external_gene_name)
+
+
+knitr::kable(external_gene_names_positive, "html") %>%
+  kableExtra::kable_styling(full_width = FALSE)
+
+
+```
+
+# Run LASSO on treatment-negative modules (Module tan: 464 genes)
+
+* Alpha = 1
+
+* Nested cross validation
+
+     + outer loop method: leave-one-out
+     + inner loop method: leave-one-out
+
+```{r}
+  alpha <- 1
+  
+  set.seed(123)
+  
+ lassoModel <- glmnet(x = negative_expression_matrix_1, y = response_variable, alpha = alpha, family = "binomial", standardize = FALSE)
+
+#  plot(lassoModel, xvar="lambda")
+# summary(lassoModel)
+  
+   n_outer_folds <- length(response_variable)  # LOOCV
+    n_inner_folds <- 23
+    outer_folds <- lapply(1:length(response_variable), function(i) i)
+    
+    set.seed(123)
+    nested_cv_result <- nestcv.glmnet(
+      y = response_variable, 
+      x = negative_expression_matrix_1, 
+      family = "binomial",
+      outer_method = "LOOCV", 
+      n_inner_folds = n_inner_folds,
+      outer_folds = outer_folds, 
+      alphaSet = 1,
+      finalCV = TRUE
+    )
+    
+    # Get the lambda value, model and non-zero coefficients selected during cross-validation
+    best_lambda <- nested_cv_result$final_param["lambda"]
+    best_lambda_value <- as.numeric(best_lambda)
+    current_model <- nested_cv_result$final_fit
+    non_zero_coefficients <- rownames(nested_cv_result[["final_coef"]])[-1]
+  
+  cat("Tuned lambda value:\n", best_lambda_value, "\n")
+  current_model
+  cat("Non-zero Coefficients:\n", non_zero_coefficients, "\n")
+
+  gene_negative_1 <- non_zero_coefficients
+  
+```
+## Gene list with non-zero coeffients (1 gene)
+
+```{r}
+ensemblID <- gene_negative_1
+attributes <- c("ensembl_gene_id", "external_gene_name")
+ensemblMart <- useMart("ensembl", dataset="hsapiens_gene_ensembl")
+external_gene_names_negative_1 <- getBM(attributes = attributes, filters = "ensembl_gene_id", values = gene_negative_1, mart = ensemblMart)
+
+
+external_gene_names_negative_1$external_gene_name <- ifelse(external_gene_names_negative_1$external_gene_name == "", 
+                                                     external_gene_names_negative_1$ensembl_gene_id, 
+                                                   external_gene_names_negative_1$external_gene_name)
+
+
+knitr::kable(external_gene_names_negative_1, "html") %>%
+  kableExtra::kable_styling(full_width = FALSE)
+
+```
+
+
+# Run LASSO on treatment-negative modules (Module saddlebrown: 39 genes)
+
+* Alpha = 1
+
+* Nested cross validation
+
+     + outer loop method: leave-one-out
+     + inner loop method: leave-one-out --> no genes with non-zero coefficients
+     + inner loop method: k-fold --> k = 4, 5, 6, 7 --> no genes with non-zero coefficients
+ 
+```{r}
+  alpha <- 1
+  
+  set.seed(123)
+  
+ lassoModel <- glmnet(x = negative_expression_matrix_2, y = response_variable, alpha = alpha, family = "binomial", standardize = FALSE)
+
+  
+   n_outer_folds <- length(response_variable)  # LOOCV
+    n_inner_folds <- 23
+    outer_folds <- lapply(1:length(response_variable), function(i) i)
+    
+    set.seed(123)
+    nested_cv_result <- nestcv.glmnet(
+      y = response_variable, 
+      x = negative_expression_matrix_2, 
+      family = "binomial",
+      outer_method = "LOOCV", 
+      n_inner_folds = n_inner_folds,
+      outer_folds = outer_folds, 
+      alphaSet = 1,
+      finalCV = TRUE
+    )
+    
+    # Get the lambda value, model and non-zero coefficients selected during cross-validation
+    best_lambda <- nested_cv_result$final_param["lambda"]
+    best_lambda_value <- as.numeric(best_lambda)
+    current_model <- nested_cv_result$final_fit
+    non_zero_coefficients <- rownames(nested_cv_result[["final_coef"]])[-1]
+  
+  cat("Tuned lambda value:\n", best_lambda_value, "\n")
+  current_model
+  cat("Non-zero Coefficients:\n", non_zero_coefficients, "\n")
+
+  gene_negative_2 <- non_zero_coefficients
+  
+```
+
+## No genes with non-zero coeffients
+
+# Final genes list (Total 6 genes)
+
+
+| Modules (size)       | Correlation to treatment     | Genes selected by lasso |
+| ------------- |:-------------:| -----:|
+|  **grey60 (149 genes)**      | Positive | 10 |
+|  **tan (464 genes)**      | Negative      |   4 |
+| **saddlebrown (39 genes)**      | Negative      |    0 |
+
+
+ 
+```{r}
+gene_final <- rbind(external_gene_names_positive, external_gene_names_negative_1)
+gene_final$module <- NA
+gene_final$module[1:5] <- "Positive"
+gene_final$module[6] <- "Negative"
+rownames(gene_final) <- seq_len(nrow(gene_final))
+
+knitr::kable(gene_final, "html",row.names = TRUE) %>%
+  kableExtra::kable_styling(full_width = FALSE)
+```
+
+# Final model (6 genes)
+
+```{r}
+
+
+
+genes_final_model <- paste(gene_final$ensembl_gene_id, collapse = "     + ")
+
+formula_str <- paste("response_variable ~", genes_final_model)
+
+finalModel_positive <- glm(formula_str,
+                  data = as.data.frame(expression_matrix),
+                  family = binomial(link = "logit"), 
+                  control = list(maxit = 1000))
+
+
+summary(finalModel_positive)
+```
+
+
+# Heatmap (Pre-treatment vs Post-treatment)
+
+```{r}
+library(RColorBrewer)
+selected_genes <- gene_final$ensembl_gene_id
+zMatrix <- t(TPM_ordered_variance)
+gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
+gene_zMatrix <- as.data.frame(gene_zMatrix)
+
+breaksList = seq(-3, 3, by = 0.06)
+
+sorted <- coldata[order(coldata$treatment == '1', coldata$treatment), ]
+cluster_treatment <- as.data.frame(t(sorted[, c(1:4)]))
+
+gene_zMatrix_reordered <- gene_zMatrix[, match(names(cluster_treatment), names(gene_zMatrix))]
+
+
+condition_reordered <- data.frame(sorted[, 1])
+colnames(condition_reordered)[1] <- "treatment"
+rownames(condition_reordered) <- colnames(gene_zMatrix_reordered)
+
+gene_zMatrix_reordered <- gene_zMatrix_reordered[match(gene_final$ensembl_gene_id, rownames(gene_zMatrix_reordered)), ]
+rownames(gene_zMatrix_reordered) <- gene_final$external_gene_name
+
+p1 <- pheatmap(gene_zMatrix_reordered,
+               color = colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+               show_rownames = TRUE, 
+               cluster_cols = FALSE, 
+               cluster_rows = FALSE, 
+               annotation_col = condition_reordered, 
+               annotation_colors = list(treatment = c("0" = "lightpink", "1" = "lightgreen")),
+               cutree_rows = 2, 
+               cutree_cols = 2, 
+               fontsize_row = 7,
+               breaks = breaksList,
+               legend = TRUE
+)
+
+p1
+
+```
+
+# Heatmap for Log-FoldChange for each patient
+
+```{r}
+selected_genes <- gene_final$ensembl_gene_id
+zMatrix <- t(TPM_ordered_variance)
+gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
+gene_zMatrix <- as.data.frame(t(gene_zMatrix))
+df <- merge(as.data.frame(gene_zMatrix), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+df <- df[, c(2,3,4,5,6,7,8,10)]
+
+df2 <- df %>%
+  pivot_longer(cols = -c(patient_id, treatment), names_to = "Gene", values_to = "logTPM") %>%
+  group_by(patient_id, Gene) 
+
+treatment_1 <- df2 %>% dplyr::filter(treatment == 1)
+treatment_0 <- df2 %>% dplyr::filter(treatment == 0)
+merged_data <- merge(treatment_1, treatment_0, by = c("patient_id", "Gene"), suffixes = c("_treatment_1", "_treatment_0"))
+merged_data <- merged_data %>%
+  mutate(diff_logTPM = logTPM_treatment_1 - logTPM_treatment_0) %>%
+  dplyr::select(Gene, patient_id, diff_logTPM) %>% 
+  pivot_wider(names_from = Gene, values_from = diff_logTPM) 
+
+rownames(merged_data) <- merged_data$patient_id
+patient <- as.data.frame(unique(coldata$patient_id))
+rownames(patient) <- patient$`unique(coldata$patient_id)`
+merged_data_patinet_order <- merged_data[rownames(patient), ]
+
+rownames(merged_data_patinet_order) <- merged_data_patinet_order$patient_id
+gene_LFC <- as.data.frame(t(merged_data_patinet_order))
+gene_LFC <- gene_LFC[-1, ]
+
+gene_LFC_reordered <- gene_LFC[match(gene_final$ensembl_gene_id, rownames(gene_LFC)), ]
+rownames(gene_LFC_reordered) <- gene_final$external_gene_name
+#keep patient_id the same as the previous heatmap
+
+p4 <- pheatmap(gene_LFC_reordered, 
+         show_rownames = TRUE, 
+         cluster_cols = FALSE, 
+         cluster_rows = FALSE, 
+         cutree_rows = 2, 
+         cutree_cols = 2, 
+         breaks = breaksList,
+         fontsize_row = 7)
+```

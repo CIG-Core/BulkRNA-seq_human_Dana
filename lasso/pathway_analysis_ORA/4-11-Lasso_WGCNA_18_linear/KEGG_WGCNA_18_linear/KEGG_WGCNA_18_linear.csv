@@ -1,0 +1,6 @@
+"","ID","Description","GeneRatio","BgRatio","pvalue","p.adjust","qvalue","geneID","Count"
+"hsa00600","hsa00600","Sphingolipid metabolism","1/2","54/8746",0.0123110824688686,0.054058614875635,0.022761522052899,"CERS4",1
+"hsa04071","hsa04071","Sphingolipid signaling pathway","1/2","121/8746",0.0274799477065523,0.054058614875635,0.022761522052899,"CERS4",1
+"hsa05017","hsa05017","Spinocerebellar ataxia","1/2","143/8746",0.032435168925381,0.054058614875635,0.022761522052899,"SPTBN2",1
+"hsa04820","hsa04820","Cytoskeleton in muscle cells","1/2","229/8746",0.0516841416159268,0.0646051770199085,0.0272021797978562,"SPTBN2",1
+"hsa05022","hsa05022","Pathways of neurodegeneration - multiple diseases","1/2","476/8746",0.105893577160226,0.105893577160226,0.0445867693306216,"SPTBN2",1

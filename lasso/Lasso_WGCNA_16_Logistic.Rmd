@@ -1,5 +1,5 @@
 ---
-title: "Lasso_WGCNA_SoftThreshold_16"
+title: "Logistic_WGCNA_16"
 author: 
 - name: "Computational Immunogenomics Core (CIG Core)"
   affiliation: "Center for Systems Immunology, University of Pittsburgh"
@@ -89,7 +89,64 @@ coldata$age_group <- factor(coldata$age_group)
 TPM_ordered_variance <- read.csv(file.path(file_path), row.names = 1)
 ```
 
+```{r, include=FALSE, echo=FALSE}
+RSEM_path <- file.path(resPath, "rsem_counts")
+rsem_files <- list.files(RSEM_path, pattern = "quant_star-rsem.genes.results", full.names = TRUE)
+sample_names <- sapply(strsplit(basename(rsem_files), "_"), function(x) paste(x[1:4], collapse = "_"))
+names(rsem_files) <- sample_names
 
+txi.rsem <- tximport(rsem_files, type = "rsem", txIn = FALSE, txOut = FALSE) #txIn/Out = FALSE --> gene-level
+# Still have 60708 genes (stay the same number after removing version number + duplicates)
+
+#filter length: remove 0-length values
+txi.rsem$abundance <-
+  txi.rsem$abundance[apply(txi.rsem$length,
+                                1,
+                                function(row) all(row !=0 )),]
+# keep counts have same number of levels as abundance 
+txi.rsem$counts <-
+  txi.rsem$counts[apply(txi.rsem$length,
+                                1,
+                                function(row) all(row !=0 )),]
+# align samples: make sure rownames of txi.rsem correspond to sample names in coldata
+counts <- as.data.frame(txi.rsem$counts)
+counts <- counts[, rownames(coldata)]
+# filter genes with sum of counts >= 10 in all samples 
+# filtered_counts <- counts[rowSums(counts) >= 10, ] #29221
+
+# remove genes with counts < 10 in over half of samples
+remove_low_counts <- counts[rowSums(counts >= 10) >= 12, ] # 16941
+
+nzv_genes <- nearZeroVar(t(remove_low_counts)) #didn't find any non-zero variance genes
+
+# remove genes with a high frequency of zeros counts (0 count in over 20% of the samples)
+remove_high_0_counts <- remove_low_counts[rowSums(remove_low_counts == 0) <= 0.2 * ncol(remove_low_counts), ] #16895
+
+filtered_counts <- remove_high_0_counts
+
+subset_abundance <- txi.rsem$abundance[rownames(filtered_counts), ]
+tximport_TPM <- as.data.frame(subset_abundance) 
+tximport_TPM <- tximport_TPM[, rownames(coldata)]
+
+#check if there is any overlapping
+#common_genes <- intersect(rownames(tximport_TPM), rownames(res_LRT))
+#nrow(tximport_TPM)  #16895
+#nrow(res_LRT) #19395
+#length(common_genes) #16895
+
+tximport_TPM$ensembl_gene_id_version <- rownames(tximport_TPM)
+rownames(tximport_TPM) <- NULL
+tximport_TPM$ensembl_gene_id <- sub("\\.\\d+$", "", tximport_TPM$ensembl_gene_id_version)
+rownames(tximport_TPM) <- tximport_TPM$ensembl_gene_id
+
+tximport_TPM <- tximport_TPM[, c(-25, -26)]
+tximport_TPM <- tximport_TPM[(!duplicated(rownames(tximport_TPM))), ]
+
+tximport_TPM[, 1:ncol(tximport_TPM)] <- sapply(tximport_TPM[, 1:ncol(tximport_TPM)], as.numeric) #convert it to numeric factors
+all(colnames(tximport_TPM) %in% rownames(coldata)) # checking to see if sample names match between the two files
+all(colnames(tximport_TPM) == rownames(coldata)) # checking to see if the sample names are in the same order in both files
+TPM <- tximport_TPM
+```
 
 ```{r, results = FALSE}
 # TPM_ordered_variance_plot <- t(TPM_ordered_variance)
@@ -256,6 +313,15 @@ plot.roc(
 nested_cv_result[["summary"]][["table"]]
 nested_cv_result[["summary"]][["metrics"]]
 ```
+
+## TPM (pre-treatment (front) vs. post-treatment (back))
+```{r}
+selected_genes <- external_gene_names_positive$ensembl_gene_id
+gene_TPM <- TPM[rownames(TPM) %in% selected_genes, , drop = FALSE]
+rownames(gene_TPM) <- external_gene_names_positive$external_gene_name
+gene_TPM
+```
+
 ## Heatmap (Pre-treatment vs Post-treatment)
 
 
@@ -442,6 +508,15 @@ external_gene_names_negative_1$external_gene_name <- ifelse(external_gene_names_
 knitr::kable(external_gene_names_negative_1, "html") %>%
   kableExtra::kable_styling(full_width = FALSE)
 ```
+
+## TPM (pre-treatment (front) vs. post-treatment (back))
+```{r}
+selected_genes <- external_gene_names_negative_1$ensembl_gene_id
+gene_TPM <- TPM[rownames(TPM) %in% selected_genes, , drop = FALSE]
+rownames(gene_TPM) <- external_gene_names_negative_1$external_gene_name
+gene_TPM
+```
+
 ## Heatmap (Pre-treatment vs Post-treatment)
 
 
@@ -626,7 +701,13 @@ knitr::kable(external_gene_names_negative_2, "html") %>%
   kableExtra::kable_styling(full_width = FALSE)
 ```
 
-
+## TPM (pre-treatment (front) vs. post-treatment (back))
+```{r}
+selected_genes <- external_gene_names_negative_2$ensembl_gene_id
+gene_TPM <- TPM[rownames(TPM) %in% selected_genes, , drop = FALSE]
+rownames(gene_TPM) <- external_gene_names_negative_2$external_gene_name
+gene_TPM
+```
 
 ## Heatmap (Pre-treatment vs Post-treatment)
 

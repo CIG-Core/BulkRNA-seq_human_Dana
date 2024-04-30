@@ -229,7 +229,94 @@ knitr::kable(external_gene_names_positive, "html") %>%
 
 ```
 
+## Heatmap (Pre-treatment vs Post-treatment)
 
+
+```{r}
+library(RColorBrewer)
+selected_genes <- external_gene_names_positive$ensembl_gene_id
+zMatrix <- t(TPM_ordered_variance)
+gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
+gene_zMatrix <- as.data.frame(gene_zMatrix)
+
+breaksList = seq(-3, 3, by = 0.06)
+
+sorted <- coldata[order(coldata$treatment == '1', coldata$treatment), ]
+cluster_treatment <- as.data.frame(t(sorted[, c(1:4)]))
+
+gene_zMatrix_reordered <- gene_zMatrix[, match(names(cluster_treatment), names(gene_zMatrix))]
+
+
+condition_reordered <- data.frame(sorted[, 1])
+colnames(condition_reordered)[1] <- "treatment"
+rownames(condition_reordered) <- colnames(gene_zMatrix_reordered)
+
+gene_zMatrix_reordered <- gene_zMatrix_reordered[match(external_gene_names_positive$ensembl_gene_id, rownames(gene_zMatrix_reordered)), ]
+rownames(gene_zMatrix_reordered) <- external_gene_names_positive$external_gene_name
+
+p1 <- pheatmap(gene_zMatrix_reordered,
+               color = colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+               show_rownames = TRUE, 
+               cluster_cols = FALSE, 
+               cluster_rows = FALSE, 
+               annotation_col = condition_reordered, 
+               annotation_colors = list(treatment = c("0" = "lightpink", "1" = "lightgreen")),
+               cutree_rows = 2, 
+               cutree_cols = 2, 
+               fontsize_row = 7,
+               breaks = breaksList,
+               legend = TRUE
+)
+
+p1
+
+```
+
+## Heatmap for Log-FoldChange for each patient
+
+```{r}
+selected_genes <- external_gene_names_positive$ensembl_gene_id
+zMatrix <- t(TPM_ordered_variance)
+gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
+gene_zMatrix <- as.data.frame(t(gene_zMatrix))
+df <- merge(as.data.frame(gene_zMatrix), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+df <- df[, c(2,3,4,5,6,7,9)]
+
+df2 <- df %>%
+  pivot_longer(cols = -c(patient_id, treatment), names_to = "Gene", values_to = "logTPM") %>%
+  group_by(patient_id, Gene) 
+
+treatment_1 <- df2 %>% dplyr::filter(treatment == 1)
+treatment_0 <- df2 %>% dplyr::filter(treatment == 0)
+merged_data <- merge(treatment_1, treatment_0, by = c("patient_id", "Gene"), suffixes = c("_treatment_1", "_treatment_0"))
+merged_data <- merged_data %>%
+  mutate(diff_logTPM = logTPM_treatment_1 - logTPM_treatment_0) %>%
+  dplyr::select(Gene, patient_id, diff_logTPM) %>% 
+  pivot_wider(names_from = Gene, values_from = diff_logTPM) 
+
+rownames(merged_data) <- merged_data$patient_id
+patient <- as.data.frame(unique(coldata$patient_id))
+rownames(patient) <- patient$`unique(coldata$patient_id)`
+merged_data_patinet_order <- merged_data[rownames(patient), ]
+
+rownames(merged_data_patinet_order) <- merged_data_patinet_order$patient_id
+gene_LFC <- as.data.frame(t(merged_data_patinet_order))
+gene_LFC <- gene_LFC[-1, ]
+
+gene_LFC_reordered <- gene_LFC[match(external_gene_names_positive$ensembl_gene_id, rownames(gene_LFC)), ]
+rownames(gene_LFC_reordered) <- external_gene_names_positive$external_gene_name
+#keep patient_id the same as the previous heatmap
+breaksList = seq(-3, 3, by = 0.06)
+p4 <- pheatmap(gene_LFC_reordered, 
+         show_rownames = TRUE, 
+         cluster_cols = FALSE, 
+         cluster_rows = FALSE, 
+         cutree_rows = 2, 
+         cutree_cols = 2, 
+         breaks = breaksList,
+         fontsize_row = 7)
+```
 
 # Run LASSO on treatment-negative modules (Module tan: 464 genes)
 
@@ -297,6 +384,96 @@ knitr::kable(external_gene_names_negative_1, "html") %>%
   kableExtra::kable_styling(full_width = FALSE)
 
 ```
+
+## Heatmap (Pre-treatment vs Post-treatment)
+
+
+```{r}
+library(RColorBrewer)
+selected_genes <- external_gene_names_negative_1$ensembl_gene_id
+zMatrix <- t(TPM_ordered_variance)
+gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
+gene_zMatrix <- as.data.frame(gene_zMatrix)
+
+breaksList = seq(-3, 3, by = 0.06)
+
+sorted <- coldata[order(coldata$treatment == '1', coldata$treatment), ]
+cluster_treatment <- as.data.frame(t(sorted[, c(1:4)]))
+
+gene_zMatrix_reordered <- gene_zMatrix[, match(names(cluster_treatment), names(gene_zMatrix))]
+
+
+condition_reordered <- data.frame(sorted[, 1])
+colnames(condition_reordered)[1] <- "treatment"
+rownames(condition_reordered) <- colnames(gene_zMatrix_reordered)
+
+gene_zMatrix_reordered <- gene_zMatrix_reordered[match(external_gene_names_negative_1$ensembl_gene_id, rownames(gene_zMatrix_reordered)), ]
+rownames(gene_zMatrix_reordered) <- external_gene_names_negative_1$external_gene_name
+
+p1 <- pheatmap(gene_zMatrix_reordered,
+               color = colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+               show_rownames = TRUE, 
+               cluster_cols = FALSE, 
+               cluster_rows = FALSE, 
+               annotation_col = condition_reordered, 
+               annotation_colors = list(treatment = c("0" = "lightpink", "1" = "lightgreen")),
+               cutree_rows = 2, 
+               cutree_cols = 2, 
+               fontsize_row = 7,
+               breaks = breaksList,
+               legend = TRUE
+)
+
+p1
+
+```
+
+## Heatmap for Log-FoldChange for each patient
+
+```{r}
+selected_genes <- external_gene_names_negative_1$ensembl_gene_id
+zMatrix <- t(TPM_ordered_variance)
+gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
+gene_zMatrix <- as.data.frame(t(gene_zMatrix))
+df <- merge(as.data.frame(gene_zMatrix), as.data.frame(coldata), by = "row.names", all.x = TRUE)
+df <- df[, c(2,3,5)]
+
+df2 <- df %>%
+  pivot_longer(cols = -c(patient_id, treatment), names_to = "Gene", values_to = "logTPM") %>%
+  group_by(patient_id, Gene) 
+
+treatment_1 <- df2 %>% dplyr::filter(treatment == 1)
+treatment_0 <- df2 %>% dplyr::filter(treatment == 0)
+merged_data <- merge(treatment_1, treatment_0, by = c("patient_id", "Gene"), suffixes = c("_treatment_1", "_treatment_0"))
+merged_data <- merged_data %>%
+  mutate(diff_logTPM = logTPM_treatment_1 - logTPM_treatment_0) %>%
+  dplyr::select(Gene, patient_id, diff_logTPM) %>% 
+  pivot_wider(names_from = Gene, values_from = diff_logTPM) 
+
+rownames(merged_data) <- merged_data$patient_id
+patient <- as.data.frame(unique(coldata$patient_id))
+rownames(patient) <- patient$`unique(coldata$patient_id)`
+merged_data_patinet_order <- merged_data[rownames(patient), ]
+
+rownames(merged_data_patinet_order) <- merged_data_patinet_order$patient_id
+gene_LFC <- as.data.frame(t(merged_data_patinet_order))
+gene_LFC <- gene_LFC[-1, ]
+
+gene_LFC_reordered <- gene_LFC[match(external_gene_names_negative_1$ensembl_gene_id, rownames(gene_LFC)), ]
+rownames(gene_LFC_reordered) <- external_gene_names_negative_1$external_gene_name
+#keep patient_id the same as the previous heatmap
+breaksList = seq(-3, 3, by = 0.06)
+p4 <- pheatmap(gene_LFC_reordered, 
+         show_rownames = TRUE, 
+         cluster_cols = FALSE, 
+         cluster_rows = FALSE, 
+         cutree_rows = 2, 
+         cutree_cols = 2, 
+         breaks = breaksList,
+         fontsize_row = 7)
+```
+
 # Run LASSO on treatment-negative modules (Module saddlebrown: 39 genes)
 
 * Alpha = 1

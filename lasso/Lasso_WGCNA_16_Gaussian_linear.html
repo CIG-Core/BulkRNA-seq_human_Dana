@@ -10,9 +10,9 @@
 
 
 
-<meta name="date" content="2024-04-30" />
+<meta name="date" content="2024-05-01" />
 
-<title>Logistic_WGCNA_18</title>
+<title>Linear_WGCNA_16</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -1679,13 +1679,13 @@ border-radius: 0px;
 
 
 
-<h1 class="title toc-ignore">Logistic_WGCNA_18</h1>
+<h1 class="title toc-ignore">Linear_WGCNA_16</h1>
 <h4 class="author">Computational Immunogenomics Core (CIG Core)</h4>
 <address class="author_afil">
 Center for Systems Immunology, University of
 Pittsburgh<br><a class="author_email" href="mailto:#"><a href="mailto:sis186@pitt.edu" class="email">sis186@pitt.edu</a></a>
 </address>
-<h4 class="date">2024-04-30</h4>
+<h4 class="date">2024-05-01</h4>
 
 </div>
 
@@ -1871,93 +1871,1115 @@ IGKV1-8
 </tbody>
 </table>
 </div>
-<div id="tpm-pre-treatment-front-vs.-post-treatment-back" class="section level2" number="2.3">
-<h2><span class="header-section-number">2.3</span> TPM (pre-treatment
-(front) vs. post-treatment (back))</h2>
-<pre><code>##         160008699_3_0_S5 160008699_3_8_S6 290001824_4_0_S7 290001824_4_8_S8
-## KCNG1               0.65             0.94             0.89             1.28
-## CDK14               6.49             5.21             7.49             8.77
-## PPIE               21.15            16.44            17.39            17.77
-## MYBL2               1.22             1.04             0.89             2.54
-## KHDRBS2             0.52             0.46             0.31             0.48
-## SOX5                0.04             0.17             1.80             0.37
-## PTPRK               0.74             1.37             0.58             2.68
-## NAV2                0.71             0.63             0.47             0.87
-## MTCL1               0.30             0.44             0.48             0.34
-## SPTBN2              0.65             0.05             0.36             0.19
-## IGKV1-8             2.70             3.34             0.00             1.06
-##         330001842_17_0_S31 330001842_17_8_S32 470009458_5_0_S9
-## KCNG1                 0.51               0.93             0.55
-## CDK14                 3.21               5.54             4.61
-## PPIE                 12.59              10.86            11.87
-## MYBL2                 1.86               1.99             1.61
-## KHDRBS2               0.38               0.41             0.25
-## SOX5                  0.63               0.36             1.62
-## PTPRK                 1.01               2.35             1.07
-## NAV2                  0.35               0.23             0.88
-## MTCL1                 0.41               0.43             0.32
-## SPTBN2                0.24               0.09             0.27
-## IGKV1-8               4.42               7.28             7.28
-##         470009458_5_4_S10 660009823_13_0_S25 660009823_13_8_S26
-## KCNG1                1.03               0.22               0.13
-## CDK14                5.35               3.87               8.58
-## PPIE                12.52              12.76               5.29
-## MYBL2                1.90               2.09               0.76
-## KHDRBS2              0.27               0.30               0.20
-## SOX5                 2.58               0.89               0.19
-## PTPRK                3.05               0.91               1.00
-## NAV2                 0.27               0.73               0.27
-## MTCL1                0.27               0.23               0.31
-## SPTBN2               0.21               0.20               0.28
-## IGKV1-8              8.43              11.30               2.69
-##         770004766_11_0_S21 770004766_11_8_S22 830001304_2_0_S3 830001304_2_4_S4
-## KCNG1                 0.13               0.26             0.14             0.37
-## CDK14                 3.58               6.32             7.03            10.43
-## PPIE                  7.84               9.87            18.19            14.59
-## MYBL2                 0.80               1.07             1.46             0.99
-## KHDRBS2               0.10               0.15             0.37             0.34
-## SOX5                  0.11               0.34             2.10             0.97
-## PTPRK                 0.44               0.76             1.95             2.48
-## NAV2                  0.06               0.05             1.10             0.65
-## MTCL1                 0.28               0.14             0.78             0.32
-## SPTBN2                0.01               0.10             0.41             0.13
-## IGKV1-8               0.88               0.39             4.59             1.92
-##         830002078_12_0_S23 830002078_12_8_S24 880001252_9_0_S17
-## KCNG1                 0.32               0.30              0.29
-## CDK14                 2.71               2.10              7.50
-## PPIE                 10.75               7.85             18.17
-## MYBL2                 1.09               0.16              0.95
-## KHDRBS2               0.13               0.71              0.48
-## SOX5                  0.43               0.11              1.28
-## PTPRK                 0.60               0.59              1.38
-## NAV2                  0.51               0.26              0.29
-## MTCL1                 0.45               0.20              0.35
-## SPTBN2                0.70               0.03              1.61
-## IGKV1-8               0.23               1.21              2.32
-##         880001252_9_8_S18 940004357_8_0_S15 940004357_8_8_S16 970002731_7_0_S13
-## KCNG1                0.48              0.09              0.60              0.22
-## CDK14                5.82              3.65              6.42              5.13
-## PPIE                11.21             13.71              8.37             10.27
-## MYBL2                0.77              0.77              0.85              3.31
-## KHDRBS2              0.36              0.16              0.40              0.19
-## SOX5                 0.53              0.42              0.71              0.30
-## PTPRK                1.72              0.93              1.78              0.51
-## NAV2                 0.07              1.05              1.44              0.46
-## MTCL1                0.26              0.16              0.37              0.28
-## SPTBN2               0.19              0.07              0.36              0.11
-## IGKV1-8              3.32              4.51              4.91              0.94
-##         970002731_7_4_S14 980007758_10_0_S19 980007758_10_8_S20
-## KCNG1                1.09               1.01               1.19
-## CDK14                6.11               5.42               6.72
-## PPIE                 9.80              16.09              12.64
-## MYBL2                0.28               4.64               4.22
-## KHDRBS2              0.75               0.39               0.58
-## SOX5                 0.28               0.58               0.70
-## PTPRK                1.39               1.50               2.82
-## NAV2                 0.25               0.31               0.28
-## MTCL1                0.59               0.32               0.44
-## SPTBN2               0.69               0.44               0.06
-## IGKV1-8              1.25               5.50              11.67</code></pre>
+<div id="tpm-0-pre-vs.-1-post" class="section level2" number="2.3">
+<h2><span class="header-section-number">2.3</span> TPM (0: pre vs. 1:
+post)</h2>
+<table class="table" style="width: auto !important; margin-left: auto; margin-right: auto;">
+<thead>
+<tr>
+<th style="text-align:left;">
+sample
+</th>
+<th style="text-align:right;">
+KCNG1
+</th>
+<th style="text-align:right;">
+CDK14
+</th>
+<th style="text-align:right;">
+PPIE
+</th>
+<th style="text-align:right;">
+MYBL2
+</th>
+<th style="text-align:right;">
+KHDRBS2
+</th>
+<th style="text-align:right;">
+SOX5
+</th>
+<th style="text-align:right;">
+PTPRK
+</th>
+<th style="text-align:right;">
+NAV2
+</th>
+<th style="text-align:right;">
+MTCL1
+</th>
+<th style="text-align:right;">
+SPTBN2
+</th>
+<th style="text-align:right;">
+IGKV1-8
+</th>
+<th style="text-align:right;">
+treatment
+</th>
+<th style="text-align:right;">
+patient_id
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+160008699_3_0_S5
+</td>
+<td style="text-align:right;">
+0.65
+</td>
+<td style="text-align:right;">
+6.49
+</td>
+<td style="text-align:right;">
+21.15
+</td>
+<td style="text-align:right;">
+1.22
+</td>
+<td style="text-align:right;">
+0.52
+</td>
+<td style="text-align:right;">
+0.04
+</td>
+<td style="text-align:right;">
+0.74
+</td>
+<td style="text-align:right;">
+0.71
+</td>
+<td style="text-align:right;">
+0.30
+</td>
+<td style="text-align:right;">
+0.65
+</td>
+<td style="text-align:right;">
+2.70
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+160008699_3_8_S6
+</td>
+<td style="text-align:right;">
+0.94
+</td>
+<td style="text-align:right;">
+5.21
+</td>
+<td style="text-align:right;">
+16.44
+</td>
+<td style="text-align:right;">
+1.04
+</td>
+<td style="text-align:right;">
+0.46
+</td>
+<td style="text-align:right;">
+0.17
+</td>
+<td style="text-align:right;">
+1.37
+</td>
+<td style="text-align:right;">
+0.63
+</td>
+<td style="text-align:right;">
+0.44
+</td>
+<td style="text-align:right;">
+0.05
+</td>
+<td style="text-align:right;">
+3.34
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+290001824_4_0_S7
+</td>
+<td style="text-align:right;">
+0.89
+</td>
+<td style="text-align:right;">
+7.49
+</td>
+<td style="text-align:right;">
+17.39
+</td>
+<td style="text-align:right;">
+0.89
+</td>
+<td style="text-align:right;">
+0.31
+</td>
+<td style="text-align:right;">
+1.80
+</td>
+<td style="text-align:right;">
+0.58
+</td>
+<td style="text-align:right;">
+0.47
+</td>
+<td style="text-align:right;">
+0.48
+</td>
+<td style="text-align:right;">
+0.36
+</td>
+<td style="text-align:right;">
+0.00
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+4
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+290001824_4_8_S8
+</td>
+<td style="text-align:right;">
+1.28
+</td>
+<td style="text-align:right;">
+8.77
+</td>
+<td style="text-align:right;">
+17.77
+</td>
+<td style="text-align:right;">
+2.54
+</td>
+<td style="text-align:right;">
+0.48
+</td>
+<td style="text-align:right;">
+0.37
+</td>
+<td style="text-align:right;">
+2.68
+</td>
+<td style="text-align:right;">
+0.87
+</td>
+<td style="text-align:right;">
+0.34
+</td>
+<td style="text-align:right;">
+0.19
+</td>
+<td style="text-align:right;">
+1.06
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+4
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+330001842_17_0_S31
+</td>
+<td style="text-align:right;">
+0.51
+</td>
+<td style="text-align:right;">
+3.21
+</td>
+<td style="text-align:right;">
+12.59
+</td>
+<td style="text-align:right;">
+1.86
+</td>
+<td style="text-align:right;">
+0.38
+</td>
+<td style="text-align:right;">
+0.63
+</td>
+<td style="text-align:right;">
+1.01
+</td>
+<td style="text-align:right;">
+0.35
+</td>
+<td style="text-align:right;">
+0.41
+</td>
+<td style="text-align:right;">
+0.24
+</td>
+<td style="text-align:right;">
+4.42
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+17
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+330001842_17_8_S32
+</td>
+<td style="text-align:right;">
+0.93
+</td>
+<td style="text-align:right;">
+5.54
+</td>
+<td style="text-align:right;">
+10.86
+</td>
+<td style="text-align:right;">
+1.99
+</td>
+<td style="text-align:right;">
+0.41
+</td>
+<td style="text-align:right;">
+0.36
+</td>
+<td style="text-align:right;">
+2.35
+</td>
+<td style="text-align:right;">
+0.23
+</td>
+<td style="text-align:right;">
+0.43
+</td>
+<td style="text-align:right;">
+0.09
+</td>
+<td style="text-align:right;">
+7.28
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+17
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+470009458_5_0_S9
+</td>
+<td style="text-align:right;">
+0.55
+</td>
+<td style="text-align:right;">
+4.61
+</td>
+<td style="text-align:right;">
+11.87
+</td>
+<td style="text-align:right;">
+1.61
+</td>
+<td style="text-align:right;">
+0.25
+</td>
+<td style="text-align:right;">
+1.62
+</td>
+<td style="text-align:right;">
+1.07
+</td>
+<td style="text-align:right;">
+0.88
+</td>
+<td style="text-align:right;">
+0.32
+</td>
+<td style="text-align:right;">
+0.27
+</td>
+<td style="text-align:right;">
+7.28
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+5
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+470009458_5_4_S10
+</td>
+<td style="text-align:right;">
+1.03
+</td>
+<td style="text-align:right;">
+5.35
+</td>
+<td style="text-align:right;">
+12.52
+</td>
+<td style="text-align:right;">
+1.90
+</td>
+<td style="text-align:right;">
+0.27
+</td>
+<td style="text-align:right;">
+2.58
+</td>
+<td style="text-align:right;">
+3.05
+</td>
+<td style="text-align:right;">
+0.27
+</td>
+<td style="text-align:right;">
+0.27
+</td>
+<td style="text-align:right;">
+0.21
+</td>
+<td style="text-align:right;">
+8.43
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+5
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+660009823_13_0_S25
+</td>
+<td style="text-align:right;">
+0.22
+</td>
+<td style="text-align:right;">
+3.87
+</td>
+<td style="text-align:right;">
+12.76
+</td>
+<td style="text-align:right;">
+2.09
+</td>
+<td style="text-align:right;">
+0.30
+</td>
+<td style="text-align:right;">
+0.89
+</td>
+<td style="text-align:right;">
+0.91
+</td>
+<td style="text-align:right;">
+0.73
+</td>
+<td style="text-align:right;">
+0.23
+</td>
+<td style="text-align:right;">
+0.20
+</td>
+<td style="text-align:right;">
+11.30
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+660009823_13_8_S26
+</td>
+<td style="text-align:right;">
+0.13
+</td>
+<td style="text-align:right;">
+8.58
+</td>
+<td style="text-align:right;">
+5.29
+</td>
+<td style="text-align:right;">
+0.76
+</td>
+<td style="text-align:right;">
+0.20
+</td>
+<td style="text-align:right;">
+0.19
+</td>
+<td style="text-align:right;">
+1.00
+</td>
+<td style="text-align:right;">
+0.27
+</td>
+<td style="text-align:right;">
+0.31
+</td>
+<td style="text-align:right;">
+0.28
+</td>
+<td style="text-align:right;">
+2.69
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+770004766_11_0_S21
+</td>
+<td style="text-align:right;">
+0.13
+</td>
+<td style="text-align:right;">
+3.58
+</td>
+<td style="text-align:right;">
+7.84
+</td>
+<td style="text-align:right;">
+0.80
+</td>
+<td style="text-align:right;">
+0.10
+</td>
+<td style="text-align:right;">
+0.11
+</td>
+<td style="text-align:right;">
+0.44
+</td>
+<td style="text-align:right;">
+0.06
+</td>
+<td style="text-align:right;">
+0.28
+</td>
+<td style="text-align:right;">
+0.01
+</td>
+<td style="text-align:right;">
+0.88
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+770004766_11_8_S22
+</td>
+<td style="text-align:right;">
+0.26
+</td>
+<td style="text-align:right;">
+6.32
+</td>
+<td style="text-align:right;">
+9.87
+</td>
+<td style="text-align:right;">
+1.07
+</td>
+<td style="text-align:right;">
+0.15
+</td>
+<td style="text-align:right;">
+0.34
+</td>
+<td style="text-align:right;">
+0.76
+</td>
+<td style="text-align:right;">
+0.05
+</td>
+<td style="text-align:right;">
+0.14
+</td>
+<td style="text-align:right;">
+0.10
+</td>
+<td style="text-align:right;">
+0.39
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+830001304_2_0_S3
+</td>
+<td style="text-align:right;">
+0.14
+</td>
+<td style="text-align:right;">
+7.03
+</td>
+<td style="text-align:right;">
+18.19
+</td>
+<td style="text-align:right;">
+1.46
+</td>
+<td style="text-align:right;">
+0.37
+</td>
+<td style="text-align:right;">
+2.10
+</td>
+<td style="text-align:right;">
+1.95
+</td>
+<td style="text-align:right;">
+1.10
+</td>
+<td style="text-align:right;">
+0.78
+</td>
+<td style="text-align:right;">
+0.41
+</td>
+<td style="text-align:right;">
+4.59
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+2
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+830001304_2_4_S4
+</td>
+<td style="text-align:right;">
+0.37
+</td>
+<td style="text-align:right;">
+10.43
+</td>
+<td style="text-align:right;">
+14.59
+</td>
+<td style="text-align:right;">
+0.99
+</td>
+<td style="text-align:right;">
+0.34
+</td>
+<td style="text-align:right;">
+0.97
+</td>
+<td style="text-align:right;">
+2.48
+</td>
+<td style="text-align:right;">
+0.65
+</td>
+<td style="text-align:right;">
+0.32
+</td>
+<td style="text-align:right;">
+0.13
+</td>
+<td style="text-align:right;">
+1.92
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+2
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+830002078_12_0_S23
+</td>
+<td style="text-align:right;">
+0.32
+</td>
+<td style="text-align:right;">
+2.71
+</td>
+<td style="text-align:right;">
+10.75
+</td>
+<td style="text-align:right;">
+1.09
+</td>
+<td style="text-align:right;">
+0.13
+</td>
+<td style="text-align:right;">
+0.43
+</td>
+<td style="text-align:right;">
+0.60
+</td>
+<td style="text-align:right;">
+0.51
+</td>
+<td style="text-align:right;">
+0.45
+</td>
+<td style="text-align:right;">
+0.70
+</td>
+<td style="text-align:right;">
+0.23
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+830002078_12_8_S24
+</td>
+<td style="text-align:right;">
+0.30
+</td>
+<td style="text-align:right;">
+2.10
+</td>
+<td style="text-align:right;">
+7.85
+</td>
+<td style="text-align:right;">
+0.16
+</td>
+<td style="text-align:right;">
+0.71
+</td>
+<td style="text-align:right;">
+0.11
+</td>
+<td style="text-align:right;">
+0.59
+</td>
+<td style="text-align:right;">
+0.26
+</td>
+<td style="text-align:right;">
+0.20
+</td>
+<td style="text-align:right;">
+0.03
+</td>
+<td style="text-align:right;">
+1.21
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+880001252_9_0_S17
+</td>
+<td style="text-align:right;">
+0.29
+</td>
+<td style="text-align:right;">
+7.50
+</td>
+<td style="text-align:right;">
+18.17
+</td>
+<td style="text-align:right;">
+0.95
+</td>
+<td style="text-align:right;">
+0.48
+</td>
+<td style="text-align:right;">
+1.28
+</td>
+<td style="text-align:right;">
+1.38
+</td>
+<td style="text-align:right;">
+0.29
+</td>
+<td style="text-align:right;">
+0.35
+</td>
+<td style="text-align:right;">
+1.61
+</td>
+<td style="text-align:right;">
+2.32
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+880001252_9_8_S18
+</td>
+<td style="text-align:right;">
+0.48
+</td>
+<td style="text-align:right;">
+5.82
+</td>
+<td style="text-align:right;">
+11.21
+</td>
+<td style="text-align:right;">
+0.77
+</td>
+<td style="text-align:right;">
+0.36
+</td>
+<td style="text-align:right;">
+0.53
+</td>
+<td style="text-align:right;">
+1.72
+</td>
+<td style="text-align:right;">
+0.07
+</td>
+<td style="text-align:right;">
+0.26
+</td>
+<td style="text-align:right;">
+0.19
+</td>
+<td style="text-align:right;">
+3.32
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+940004357_8_0_S15
+</td>
+<td style="text-align:right;">
+0.09
+</td>
+<td style="text-align:right;">
+3.65
+</td>
+<td style="text-align:right;">
+13.71
+</td>
+<td style="text-align:right;">
+0.77
+</td>
+<td style="text-align:right;">
+0.16
+</td>
+<td style="text-align:right;">
+0.42
+</td>
+<td style="text-align:right;">
+0.93
+</td>
+<td style="text-align:right;">
+1.05
+</td>
+<td style="text-align:right;">
+0.16
+</td>
+<td style="text-align:right;">
+0.07
+</td>
+<td style="text-align:right;">
+4.51
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+8
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+940004357_8_8_S16
+</td>
+<td style="text-align:right;">
+0.60
+</td>
+<td style="text-align:right;">
+6.42
+</td>
+<td style="text-align:right;">
+8.37
+</td>
+<td style="text-align:right;">
+0.85
+</td>
+<td style="text-align:right;">
+0.40
+</td>
+<td style="text-align:right;">
+0.71
+</td>
+<td style="text-align:right;">
+1.78
+</td>
+<td style="text-align:right;">
+1.44
+</td>
+<td style="text-align:right;">
+0.37
+</td>
+<td style="text-align:right;">
+0.36
+</td>
+<td style="text-align:right;">
+4.91
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+8
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+970002731_7_0_S13
+</td>
+<td style="text-align:right;">
+0.22
+</td>
+<td style="text-align:right;">
+5.13
+</td>
+<td style="text-align:right;">
+10.27
+</td>
+<td style="text-align:right;">
+3.31
+</td>
+<td style="text-align:right;">
+0.19
+</td>
+<td style="text-align:right;">
+0.30
+</td>
+<td style="text-align:right;">
+0.51
+</td>
+<td style="text-align:right;">
+0.46
+</td>
+<td style="text-align:right;">
+0.28
+</td>
+<td style="text-align:right;">
+0.11
+</td>
+<td style="text-align:right;">
+0.94
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+7
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+970002731_7_4_S14
+</td>
+<td style="text-align:right;">
+1.09
+</td>
+<td style="text-align:right;">
+6.11
+</td>
+<td style="text-align:right;">
+9.80
+</td>
+<td style="text-align:right;">
+0.28
+</td>
+<td style="text-align:right;">
+0.75
+</td>
+<td style="text-align:right;">
+0.28
+</td>
+<td style="text-align:right;">
+1.39
+</td>
+<td style="text-align:right;">
+0.25
+</td>
+<td style="text-align:right;">
+0.59
+</td>
+<td style="text-align:right;">
+0.69
+</td>
+<td style="text-align:right;">
+1.25
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+7
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+980007758_10_0_S19
+</td>
+<td style="text-align:right;">
+1.01
+</td>
+<td style="text-align:right;">
+5.42
+</td>
+<td style="text-align:right;">
+16.09
+</td>
+<td style="text-align:right;">
+4.64
+</td>
+<td style="text-align:right;">
+0.39
+</td>
+<td style="text-align:right;">
+0.58
+</td>
+<td style="text-align:right;">
+1.50
+</td>
+<td style="text-align:right;">
+0.31
+</td>
+<td style="text-align:right;">
+0.32
+</td>
+<td style="text-align:right;">
+0.44
+</td>
+<td style="text-align:right;">
+5.50
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+980007758_10_8_S20
+</td>
+<td style="text-align:right;">
+1.19
+</td>
+<td style="text-align:right;">
+6.72
+</td>
+<td style="text-align:right;">
+12.64
+</td>
+<td style="text-align:right;">
+4.22
+</td>
+<td style="text-align:right;">
+0.58
+</td>
+<td style="text-align:right;">
+0.70
+</td>
+<td style="text-align:right;">
+2.82
+</td>
+<td style="text-align:right;">
+0.28
+</td>
+<td style="text-align:right;">
+0.44
+</td>
+<td style="text-align:right;">
+0.06
+</td>
+<td style="text-align:right;">
+11.67
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+10
+</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div id="heatmap-pre-treatment-vs-post-treatment" class="section level2" number="2.4">
 <h2><span class="header-section-number">2.4</span> Heatmap
@@ -2051,49 +3073,590 @@ ENSG00000279982
 </tbody>
 </table>
 </div>
-<div id="tpm-pre-treatment-front-vs.-post-treatment-back-1" class="section level2" number="3.3">
-<h2><span class="header-section-number">3.3</span> TPM (pre-treatment
-(front) vs. post-treatment (back))</h2>
-<pre><code>##                 160008699_3_0_S5 160008699_3_8_S6 290001824_4_0_S7
-## METTL15                     5.35             2.49             3.64
-## BNIP3P11                    2.31             0.57             2.81
-## ENSG00000272502             0.69             1.36             2.28
-## ENSG00000279982             0.17             0.13             0.25
-##                 290001824_4_8_S8 330001842_17_0_S31 330001842_17_8_S32
-## METTL15                     3.16               1.91               2.29
-## BNIP3P11                    2.88               1.74               0.88
-## ENSG00000272502             1.16               0.76               0.26
-## ENSG00000279982             0.29               0.17               0.16
-##                 470009458_5_0_S9 470009458_5_4_S10 660009823_13_0_S25
-## METTL15                     1.98              1.63               3.71
-## BNIP3P11                    0.84              0.55               3.26
-## ENSG00000272502             1.03              0.45               0.74
-## ENSG00000279982             0.11              0.12               0.58
-##                 660009823_13_8_S26 770004766_11_0_S21 770004766_11_8_S22
-## METTL15                       0.76               1.05               1.83
-## BNIP3P11                      0.38               0.54               0.91
-## ENSG00000272502               0.38               0.37               0.68
-## ENSG00000279982               0.06               0.06               0.05
-##                 830001304_2_0_S3 830001304_2_4_S4 830002078_12_0_S23
-## METTL15                     4.07             2.69               2.33
-## BNIP3P11                    2.34             1.15               1.56
-## ENSG00000272502             1.43             0.58               0.70
-## ENSG00000279982             0.33             0.21               0.28
-##                 830002078_12_8_S24 880001252_9_0_S17 880001252_9_8_S18
-## METTL15                       2.01              3.53              2.06
-## BNIP3P11                      1.27              3.41              0.89
-## ENSG00000272502               0.65              1.53              0.54
-## ENSG00000279982               0.12              0.38              0.15
-##                 940004357_8_0_S15 940004357_8_8_S16 970002731_7_0_S13
-## METTL15                      1.91              1.64               2.7
-## BNIP3P11                     1.01              0.69               1.1
-## ENSG00000272502              0.76              0.45               0.4
-## ENSG00000279982              0.18              0.23               0.2
-##                 970002731_7_4_S14 980007758_10_0_S19 980007758_10_8_S20
-## METTL15                      1.61               2.80               2.05
-## BNIP3P11                     1.43               2.17               2.32
-## ENSG00000272502              0.45               1.29               0.75
-## ENSG00000279982              0.10               0.28               0.14</code></pre>
+<div id="tpm-0-pre-vs.-1-post-1" class="section level2" number="3.3">
+<h2><span class="header-section-number">3.3</span> TPM (0: pre vs. 1:
+post)</h2>
+<table class="table" style="width: auto !important; margin-left: auto; margin-right: auto;">
+<thead>
+<tr>
+<th style="text-align:left;">
+sample
+</th>
+<th style="text-align:right;">
+METTL15
+</th>
+<th style="text-align:right;">
+BNIP3P11
+</th>
+<th style="text-align:right;">
+ENSG00000272502
+</th>
+<th style="text-align:right;">
+ENSG00000279982
+</th>
+<th style="text-align:right;">
+treatment
+</th>
+<th style="text-align:right;">
+patient_id
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+160008699_3_0_S5
+</td>
+<td style="text-align:right;">
+5.35
+</td>
+<td style="text-align:right;">
+2.31
+</td>
+<td style="text-align:right;">
+0.69
+</td>
+<td style="text-align:right;">
+0.17
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+160008699_3_8_S6
+</td>
+<td style="text-align:right;">
+2.49
+</td>
+<td style="text-align:right;">
+0.57
+</td>
+<td style="text-align:right;">
+1.36
+</td>
+<td style="text-align:right;">
+0.13
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+290001824_4_0_S7
+</td>
+<td style="text-align:right;">
+3.64
+</td>
+<td style="text-align:right;">
+2.81
+</td>
+<td style="text-align:right;">
+2.28
+</td>
+<td style="text-align:right;">
+0.25
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+4
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+290001824_4_8_S8
+</td>
+<td style="text-align:right;">
+3.16
+</td>
+<td style="text-align:right;">
+2.88
+</td>
+<td style="text-align:right;">
+1.16
+</td>
+<td style="text-align:right;">
+0.29
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+4
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+330001842_17_0_S31
+</td>
+<td style="text-align:right;">
+1.91
+</td>
+<td style="text-align:right;">
+1.74
+</td>
+<td style="text-align:right;">
+0.76
+</td>
+<td style="text-align:right;">
+0.17
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+17
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+330001842_17_8_S32
+</td>
+<td style="text-align:right;">
+2.29
+</td>
+<td style="text-align:right;">
+0.88
+</td>
+<td style="text-align:right;">
+0.26
+</td>
+<td style="text-align:right;">
+0.16
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+17
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+470009458_5_0_S9
+</td>
+<td style="text-align:right;">
+1.98
+</td>
+<td style="text-align:right;">
+0.84
+</td>
+<td style="text-align:right;">
+1.03
+</td>
+<td style="text-align:right;">
+0.11
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+5
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+470009458_5_4_S10
+</td>
+<td style="text-align:right;">
+1.63
+</td>
+<td style="text-align:right;">
+0.55
+</td>
+<td style="text-align:right;">
+0.45
+</td>
+<td style="text-align:right;">
+0.12
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+5
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+660009823_13_0_S25
+</td>
+<td style="text-align:right;">
+3.71
+</td>
+<td style="text-align:right;">
+3.26
+</td>
+<td style="text-align:right;">
+0.74
+</td>
+<td style="text-align:right;">
+0.58
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+660009823_13_8_S26
+</td>
+<td style="text-align:right;">
+0.76
+</td>
+<td style="text-align:right;">
+0.38
+</td>
+<td style="text-align:right;">
+0.38
+</td>
+<td style="text-align:right;">
+0.06
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+770004766_11_0_S21
+</td>
+<td style="text-align:right;">
+1.05
+</td>
+<td style="text-align:right;">
+0.54
+</td>
+<td style="text-align:right;">
+0.37
+</td>
+<td style="text-align:right;">
+0.06
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+770004766_11_8_S22
+</td>
+<td style="text-align:right;">
+1.83
+</td>
+<td style="text-align:right;">
+0.91
+</td>
+<td style="text-align:right;">
+0.68
+</td>
+<td style="text-align:right;">
+0.05
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+830001304_2_0_S3
+</td>
+<td style="text-align:right;">
+4.07
+</td>
+<td style="text-align:right;">
+2.34
+</td>
+<td style="text-align:right;">
+1.43
+</td>
+<td style="text-align:right;">
+0.33
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+2
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+830001304_2_4_S4
+</td>
+<td style="text-align:right;">
+2.69
+</td>
+<td style="text-align:right;">
+1.15
+</td>
+<td style="text-align:right;">
+0.58
+</td>
+<td style="text-align:right;">
+0.21
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+2
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+830002078_12_0_S23
+</td>
+<td style="text-align:right;">
+2.33
+</td>
+<td style="text-align:right;">
+1.56
+</td>
+<td style="text-align:right;">
+0.70
+</td>
+<td style="text-align:right;">
+0.28
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+830002078_12_8_S24
+</td>
+<td style="text-align:right;">
+2.01
+</td>
+<td style="text-align:right;">
+1.27
+</td>
+<td style="text-align:right;">
+0.65
+</td>
+<td style="text-align:right;">
+0.12
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+880001252_9_0_S17
+</td>
+<td style="text-align:right;">
+3.53
+</td>
+<td style="text-align:right;">
+3.41
+</td>
+<td style="text-align:right;">
+1.53
+</td>
+<td style="text-align:right;">
+0.38
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+880001252_9_8_S18
+</td>
+<td style="text-align:right;">
+2.06
+</td>
+<td style="text-align:right;">
+0.89
+</td>
+<td style="text-align:right;">
+0.54
+</td>
+<td style="text-align:right;">
+0.15
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+940004357_8_0_S15
+</td>
+<td style="text-align:right;">
+1.91
+</td>
+<td style="text-align:right;">
+1.01
+</td>
+<td style="text-align:right;">
+0.76
+</td>
+<td style="text-align:right;">
+0.18
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+8
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+940004357_8_8_S16
+</td>
+<td style="text-align:right;">
+1.64
+</td>
+<td style="text-align:right;">
+0.69
+</td>
+<td style="text-align:right;">
+0.45
+</td>
+<td style="text-align:right;">
+0.23
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+8
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+970002731_7_0_S13
+</td>
+<td style="text-align:right;">
+2.70
+</td>
+<td style="text-align:right;">
+1.10
+</td>
+<td style="text-align:right;">
+0.40
+</td>
+<td style="text-align:right;">
+0.20
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+7
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+970002731_7_4_S14
+</td>
+<td style="text-align:right;">
+1.61
+</td>
+<td style="text-align:right;">
+1.43
+</td>
+<td style="text-align:right;">
+0.45
+</td>
+<td style="text-align:right;">
+0.10
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+7
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+980007758_10_0_S19
+</td>
+<td style="text-align:right;">
+2.80
+</td>
+<td style="text-align:right;">
+2.17
+</td>
+<td style="text-align:right;">
+1.29
+</td>
+<td style="text-align:right;">
+0.28
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+980007758_10_8_S20
+</td>
+<td style="text-align:right;">
+2.05
+</td>
+<td style="text-align:right;">
+2.32
+</td>
+<td style="text-align:right;">
+0.75
+</td>
+<td style="text-align:right;">
+0.14
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+10
+</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div id="heatmap-pre-treatment-vs-post-treatment-1" class="section level2" number="3.4">
 <h2><span class="header-section-number">3.4</span> Heatmap
@@ -2163,23 +3726,365 @@ CDIN1
 </tbody>
 </table>
 </div>
-<div id="tpm-pre-treatment-front-vs.-post-treatment-back-2" class="section level2" number="4.3">
-<h2><span class="header-section-number">4.3</span> TPM (pre-treatment
-(front) vs. post-treatment (back))</h2>
-<pre><code>##       160008699_3_0_S5 160008699_3_8_S6 290001824_4_0_S7 290001824_4_8_S8
-## CDIN1             1.14             1.35             2.48             1.72
-##       330001842_17_0_S31 330001842_17_8_S32 470009458_5_0_S9 470009458_5_4_S10
-## CDIN1               1.36               1.58             1.04              0.96
-##       660009823_13_0_S25 660009823_13_8_S26 770004766_11_0_S21
-## CDIN1               1.94               0.58               0.74
-##       770004766_11_8_S22 830001304_2_0_S3 830001304_2_4_S4 830002078_12_0_S23
-## CDIN1               0.52             2.13             1.61               1.24
-##       830002078_12_8_S24 880001252_9_0_S17 880001252_9_8_S18 940004357_8_0_S15
-## CDIN1               0.81              1.95              0.77              1.05
-##       940004357_8_8_S16 970002731_7_0_S13 970002731_7_4_S14 980007758_10_0_S19
-## CDIN1              0.72              1.43              0.83               1.74
-##       980007758_10_8_S20
-## CDIN1               1.15</code></pre>
+<div id="tpm-0-pre-vs.-1-post-2" class="section level2" number="4.3">
+<h2><span class="header-section-number">4.3</span> TPM (0: pre vs. 1:
+post)</h2>
+<table class="table" style="width: auto !important; margin-left: auto; margin-right: auto;">
+<thead>
+<tr>
+<th style="text-align:left;">
+sample
+</th>
+<th style="text-align:right;">
+CDIN1
+</th>
+<th style="text-align:right;">
+treatment
+</th>
+<th style="text-align:right;">
+patient_id
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+160008699_3_0_S5
+</td>
+<td style="text-align:right;">
+1.14
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+160008699_3_8_S6
+</td>
+<td style="text-align:right;">
+1.35
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+290001824_4_0_S7
+</td>
+<td style="text-align:right;">
+2.48
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+4
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+290001824_4_8_S8
+</td>
+<td style="text-align:right;">
+1.72
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+4
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+330001842_17_0_S31
+</td>
+<td style="text-align:right;">
+1.36
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+17
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+330001842_17_8_S32
+</td>
+<td style="text-align:right;">
+1.58
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+17
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+470009458_5_0_S9
+</td>
+<td style="text-align:right;">
+1.04
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+5
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+470009458_5_4_S10
+</td>
+<td style="text-align:right;">
+0.96
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+5
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+660009823_13_0_S25
+</td>
+<td style="text-align:right;">
+1.94
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+660009823_13_8_S26
+</td>
+<td style="text-align:right;">
+0.58
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+13
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+770004766_11_0_S21
+</td>
+<td style="text-align:right;">
+0.74
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+770004766_11_8_S22
+</td>
+<td style="text-align:right;">
+0.52
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+830001304_2_0_S3
+</td>
+<td style="text-align:right;">
+2.13
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+2
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+830001304_2_4_S4
+</td>
+<td style="text-align:right;">
+1.61
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+2
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+830002078_12_0_S23
+</td>
+<td style="text-align:right;">
+1.24
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+830002078_12_8_S24
+</td>
+<td style="text-align:right;">
+0.81
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+12
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+880001252_9_0_S17
+</td>
+<td style="text-align:right;">
+1.95
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+880001252_9_8_S18
+</td>
+<td style="text-align:right;">
+0.77
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+940004357_8_0_S15
+</td>
+<td style="text-align:right;">
+1.05
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+8
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+940004357_8_8_S16
+</td>
+<td style="text-align:right;">
+0.72
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+8
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+970002731_7_0_S13
+</td>
+<td style="text-align:right;">
+1.43
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+7
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+970002731_7_4_S14
+</td>
+<td style="text-align:right;">
+0.83
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+7
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+980007758_10_0_S19
+</td>
+<td style="text-align:right;">
+1.74
+</td>
+<td style="text-align:right;">
+0
+</td>
+<td style="text-align:right;">
+10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+980007758_10_8_S20
+</td>
+<td style="text-align:right;">
+1.15
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+10
+</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div id="heatmap-pre-treatment-vs-post-treatment-2" class="section level2" number="4.4">
 <h2><span class="header-section-number">4.4</span> Heatmap

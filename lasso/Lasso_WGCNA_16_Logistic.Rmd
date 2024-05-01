@@ -314,12 +314,17 @@ nested_cv_result[["summary"]][["table"]]
 nested_cv_result[["summary"]][["metrics"]]
 ```
 
-## TPM (pre-treatment (front) vs. post-treatment (back))
+## TPM (0: pre vs. 1: post)
 ```{r}
 selected_genes <- external_gene_names_positive$ensembl_gene_id
 gene_TPM <- TPM[rownames(TPM) %in% selected_genes, , drop = FALSE]
 rownames(gene_TPM) <- external_gene_names_positive$external_gene_name
-gene_TPM
+newcoldata <- coldata[,c(1,3)]
+gene_TPM_treat <- merge(t(gene_TPM), newcoldata, by = "row.names")
+names(gene_TPM_treat)[1] <- "sample"
+
+knitr::kable(gene_TPM_treat, "html") %>%
+  kableExtra::kable_styling(full_width = FALSE)
 ```
 
 ## Heatmap (Pre-treatment vs Post-treatment)
@@ -509,12 +514,18 @@ knitr::kable(external_gene_names_negative_1, "html") %>%
   kableExtra::kable_styling(full_width = FALSE)
 ```
 
-## TPM (pre-treatment (front) vs. post-treatment (back))
+## TPM (0: pre vs. 1: post)
+
 ```{r}
 selected_genes <- external_gene_names_negative_1$ensembl_gene_id
 gene_TPM <- TPM[rownames(TPM) %in% selected_genes, , drop = FALSE]
 rownames(gene_TPM) <- external_gene_names_negative_1$external_gene_name
-gene_TPM
+newcoldata <- coldata[,c(1,3)]
+gene_TPM_treat <- merge(t(gene_TPM), newcoldata, by = "row.names")
+names(gene_TPM_treat)[1] <- "sample"
+
+knitr::kable(gene_TPM_treat, "html") %>%
+  kableExtra::kable_styling(full_width = FALSE)
 ```
 
 ## Heatmap (Pre-treatment vs Post-treatment)
@@ -701,12 +712,18 @@ knitr::kable(external_gene_names_negative_2, "html") %>%
   kableExtra::kable_styling(full_width = FALSE)
 ```
 
-## TPM (pre-treatment (front) vs. post-treatment (back))
+## TPM (0: pre vs. 1: post) 
+
 ```{r}
 selected_genes <- external_gene_names_negative_2$ensembl_gene_id
 gene_TPM <- TPM[rownames(TPM) %in% selected_genes, , drop = FALSE]
 rownames(gene_TPM) <- external_gene_names_negative_2$external_gene_name
-gene_TPM
+newcoldata <- coldata[,c(1,3)]
+gene_TPM_treat <- merge(t(gene_TPM), newcoldata, by = "row.names")
+names(gene_TPM_treat)[1] <- "sample"
+
+knitr::kable(gene_TPM_treat, "html") %>%
+  kableExtra::kable_styling(full_width = FALSE)
 ```
 
 ## Heatmap (Pre-treatment vs Post-treatment)

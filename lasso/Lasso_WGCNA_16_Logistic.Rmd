@@ -18,7 +18,7 @@ output:
 ---
 
 ```{r setup, include=FALSE, echo=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = TRUE, message = FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 ## Libraries
 suppressMessages({
@@ -86,7 +86,6 @@ coldata$sample <- rownames(coldata)  # new variable:sample = rownames in 'coldat
 coldata$treatment <- ifelse(coldata$treatment == "Pre", 0, 1)
 coldata$treatment <- factor(coldata$treatment)
 coldata$age_group <- factor(coldata$age_group)
-TPM_ordered_variance <- read.csv(file.path(file_path), row.names = 1)
 ```
 
 ```{r, include=FALSE, echo=FALSE}
@@ -148,14 +147,21 @@ all(colnames(tximport_TPM) == rownames(coldata)) # checking to see if the sample
 TPM <- tximport_TPM
 ```
 
-```{r, results = FALSE}
-# TPM_ordered_variance_plot <- t(TPM_ordered_variance)
-# qqnorm(t(tximport_TPM))
-# abline(0, 1, col = "red") #TPM --> Poisson distribution
-# 
-# qqnorm(TPM_ordered_variance_plot) # --> normal distribution
-# abline(0, 1, col = "red")
+
+```{r}
+#use TPM
+row_std <- apply(TPM, 1, sd, na.rm = TRUE)
+row_means <- rowMeans(TPM, na.rm = TRUE)
+zMatrix <- (TPM - row_means) / row_std
+zMatrix[is.na(zMatrix)] <- 0
+zMatrix_TPM <- t(zMatrix)
+
+gene_variances <- apply(zMatrix_TPM, 2, var)
+ordered_genes <- names(sort(gene_variances, decreasing = TRUE))
+TPM_ordered_variance <- zMatrix_TPM[, ordered_genes]
 ```
+
+
 
 # Sample Metadata
 
@@ -314,7 +320,7 @@ nested_cv_result[["summary"]][["table"]]
 nested_cv_result[["summary"]][["metrics"]]
 ```
 
-## TPM (0: pre vs. 1: post)
+## TPM (pre vs. post)
 ```{r}
 selected_genes <- external_gene_names_positive$ensembl_gene_id
 gene_TPM <- TPM[rownames(TPM) %in% selected_genes, , drop = FALSE]
@@ -322,9 +328,30 @@ rownames(gene_TPM) <- external_gene_names_positive$external_gene_name
 newcoldata <- coldata[,c(1,3)]
 gene_TPM_treat <- merge(t(gene_TPM), newcoldata, by = "row.names")
 names(gene_TPM_treat)[1] <- "sample"
+gene_TPM_treat$treatment <- ifelse(gene_TPM_treat$treatment == 0, "pre", 
+                                ifelse(gene_TPM_treat$treatment == 1, "post", gene_TPM_treat$treatment))
+gene_TPM_treat$treatment <- factor(gene_TPM_treat$treatment, levels = c("pre", "post"))
+TPM_sorted <- gene_TPM_treat %>% 
+  arrange(treatment)
 
+gene_TPM_treat <- t(TPM_sorted)
 knitr::kable(gene_TPM_treat, "html") %>%
   kableExtra::kable_styling(full_width = FALSE)
+
+gene_TPM_treat <- as.data.frame(gene_TPM_treat)
+col_names <- gene_TPM_treat[1, ]
+gene_TPM_treat <- gene_TPM_treat[-1, ]
+colnames(gene_TPM_treat) <- col_names
+gene_TPM_treat$information <- rownames(gene_TPM_treat)
+gene_TPM_treat <- gene_TPM_treat %>%
+  dplyr::select(information, everything())
+library(openxlsx)
+output_path <- "/ix/cigcore/proj/biswas/code/Sissi/BulkRNA-seq_human_Dana/lasso/TPM/Logistic/posModule(152gene)_TPM_16.xlsx"
+write.xlsx(gene_TPM_treat, file = output_path)
+```
+```{r}
+library(xfun)
+xfun::embed_files(c('./TPM/Logistic/posModule(152gene)_TPM_16.xlsx'))
 ```
 
 ## Heatmap (Pre-treatment vs Post-treatment)
@@ -423,26 +450,25 @@ p4 <- pheatmap(gene_LFC_reordered,
 * Nested cross validation
 
      + outer loop method: leave-one-out
-     + inner loop method: k-fold; k = **4**
-     + Didn't find any non-zero coeffients when using leave-one-out for inner loop
+     + inner loop method: k-fold; leave-one-out
  
 ```{r}
-coldata$reverse_treatment <- ifelse(coldata$treatment == 0, 1, 0)
-
-# Converting coldata$reverse_treatment into a factor
-reverse_response_variable <- as.factor(coldata$reverse_treatment)
+# coldata$reverse_treatment <- ifelse(coldata$treatment == 0, 1, 0)
+# 
+# # Converting coldata$reverse_treatment into a factor
+# response_variable <- as.factor(coldata$reverse_treatment)
   alpha <- 1
   
   set.seed(123)
   
   
-   n_outer_folds <- length(reverse_response_variable)  # LOOCV
-    n_inner_folds <- 4
-    outer_folds <- lapply(1:length(reverse_response_variable), function(i) i)
+   n_outer_folds <- length(response_variable)  # LOOCV
+    n_inner_folds <- 23
+    outer_folds <- lapply(1:length(response_variable), function(i) i)
     
     set.seed(123)
     nested_cv_result <- nestcv.glmnet(
-      y = reverse_response_variable, 
+      y = response_variable, 
       x = negative_expression_matrix_1, 
       family = "binomial",
       outer_method = "LOOCV", 
@@ -469,8 +495,7 @@ reverse_response_variable <- as.factor(coldata$reverse_treatment)
 ```{r}
 testy <- nested_cv_result[["output"]][["testy"]]
 predyp <- nested_cv_result[["output"]][["predyp"]]
-predyp <- 1-predyp
-fit.roc <- pROC::roc(testy, predyp, direction = "<",
+fit.roc <- pROC::roc(testy, predyp, direction = ">",
                          quiet = TRUE)
 
 proc <- fit.roc
@@ -482,7 +507,7 @@ plot.roc(
   grid.lwd = 2,
   col = "royalblue",
   legacy.axes = TRUE,
-  main = paste("Nested-CV Lasso model (4 genes) in negative module (63 genes)\n Area under the curve (AUC):", round(auc, digits = 2))
+  main = paste("Nested-CV Lasso model (3 genes) in negative module (63 genes)\n Area under the curve (AUC):", round(auc, digits = 2))
 )
 
 ```
@@ -496,7 +521,7 @@ cm[["table"]]
 cm[["overall"]]
 ```
 
-## List of genes with non-zero coefficients  (4 genes) 
+## List of genes with non-zero coefficients  (3 genes) 
 
 ```{r}
 ensemblID <- gene_negative_1
@@ -514,7 +539,7 @@ knitr::kable(external_gene_names_negative_1, "html") %>%
   kableExtra::kable_styling(full_width = FALSE)
 ```
 
-## TPM (0: pre vs. 1: post)
+## TPM (pre vs. post)
 
 ```{r}
 selected_genes <- external_gene_names_negative_1$ensembl_gene_id
@@ -523,9 +548,31 @@ rownames(gene_TPM) <- external_gene_names_negative_1$external_gene_name
 newcoldata <- coldata[,c(1,3)]
 gene_TPM_treat <- merge(t(gene_TPM), newcoldata, by = "row.names")
 names(gene_TPM_treat)[1] <- "sample"
+gene_TPM_treat$treatment <- ifelse(gene_TPM_treat$treatment == 0, "pre", 
+                                ifelse(gene_TPM_treat$treatment == 1, "post", gene_TPM_treat$treatment))
+gene_TPM_treat$treatment <- factor(gene_TPM_treat$treatment, levels = c("pre", "post"))
+TPM_sorted <- gene_TPM_treat %>% 
+  arrange(treatment)
 
+gene_TPM_treat <- t(TPM_sorted)
 knitr::kable(gene_TPM_treat, "html") %>%
   kableExtra::kable_styling(full_width = FALSE)
+
+gene_TPM_treat <- as.data.frame(gene_TPM_treat)
+col_names <- gene_TPM_treat[1, ]
+gene_TPM_treat <- gene_TPM_treat[-1, ]
+colnames(gene_TPM_treat) <- col_names
+gene_TPM_treat$information <- rownames(gene_TPM_treat)
+gene_TPM_treat <- gene_TPM_treat %>%
+  dplyr::select(information, everything())
+
+output_path <- "/ix/cigcore/proj/biswas/code/Sissi/BulkRNA-seq_human_Dana/lasso/TPM/Logistic/negModule(63gene)_TPM_16.xlsx"
+write.xlsx(gene_TPM_treat, file = output_path)
+```
+
+```{r}
+library(xfun)
+xfun::embed_files(c('./TPM/Logistic/negModule(63gene)_TPM_16.xlsx'))
 ```
 
 ## Heatmap (Pre-treatment vs Post-treatment)
@@ -580,7 +627,7 @@ zMatrix <- t(TPM_ordered_variance)
 gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
 gene_zMatrix <- as.data.frame(t(gene_zMatrix))
 df <- merge(as.data.frame(gene_zMatrix), as.data.frame(coldata), by = "row.names", all.x = TRUE)
-df <- df[, c(2,3,4,5,6,8)]
+df <- df[, c(2,3,4,5,7)]
 
 df2 <- df %>%
   pivot_longer(cols = -c(patient_id, treatment), names_to = "Gene", values_to = "logTPM") %>%
@@ -626,22 +673,21 @@ p4 <- pheatmap(gene_LFC_reordered,
 
 
      + outer loop method: leave-one-out
-     + inner loop method: k-fold; k = **4**
-     + Didn't find any non-zero coeffients when using leave-one-out for inner loop
- 
+     + inner loop method: leave-one-out
+     
 ```{r}
   alpha <- 1
   
   set.seed(123)
   
   
-   n_outer_folds <- length(reverse_response_variable)  # LOOCV
-    n_inner_folds <- 4
-    outer_folds <- lapply(1:length(reverse_response_variable), function(i) i)
+   n_outer_folds <- length(response_variable)  # LOOCV
+    n_inner_folds <- 23
+    outer_folds <- lapply(1:length(response_variable), function(i) i)
     
     set.seed(123)
     nested_cv_result <- nestcv.glmnet(
-      y = reverse_response_variable, 
+      y = response_variable, 
       x = negative_expression_matrix_2, 
       family = "binomial",
       outer_method = "LOOCV", 
@@ -669,8 +715,7 @@ p4 <- pheatmap(gene_LFC_reordered,
 ```{r}
 testy <- nested_cv_result[["output"]][["testy"]]
 predyp <- nested_cv_result[["output"]][["predyp"]]
-predyp <- 1-predyp
-fit.roc <- pROC::roc(testy, predyp, direction = "<",
+fit.roc <- pROC::roc(testy, predyp, direction = ">",
                          quiet = TRUE)
 
 proc <- fit.roc
@@ -682,7 +727,7 @@ plot.roc(
   grid.lwd = 2,
   col = "royalblue",
   legacy.axes = TRUE,
-  main = paste("Nested-CV Lasso model (4 genes) in negative module (63 genes)\n Area under the curve (AUC):", round(auc, digits = 2))
+  main = paste("Nested-CV Lasso model (2 genes) in negative module (303 genes)\n Area under the curve (AUC):", round(auc, digits = 2))
 )
 ```
 
@@ -694,7 +739,7 @@ cm[["table"]]
 cm[["overall"]]
 ```
 
-## List of genes with non-zero coefficients  (1 gene)
+## List of genes with non-zero coefficients  (2 gene)
 
 ```{r}
 ensemblID <- gene_negative_2
@@ -712,7 +757,8 @@ knitr::kable(external_gene_names_negative_2, "html") %>%
   kableExtra::kable_styling(full_width = FALSE)
 ```
 
-## TPM (0: pre vs. 1: post) 
+## TPM (pre vs. post) 
+
 
 ```{r}
 selected_genes <- external_gene_names_negative_2$ensembl_gene_id
@@ -721,9 +767,30 @@ rownames(gene_TPM) <- external_gene_names_negative_2$external_gene_name
 newcoldata <- coldata[,c(1,3)]
 gene_TPM_treat <- merge(t(gene_TPM), newcoldata, by = "row.names")
 names(gene_TPM_treat)[1] <- "sample"
+gene_TPM_treat$treatment <- ifelse(gene_TPM_treat$treatment == 0, "pre", 
+                                ifelse(gene_TPM_treat$treatment == 1, "post", gene_TPM_treat$treatment))
+gene_TPM_treat$treatment <- factor(gene_TPM_treat$treatment, levels = c("pre", "post"))
+TPM_sorted <- gene_TPM_treat %>% 
+  arrange(treatment)
 
+gene_TPM_treat <- t(TPM_sorted)
 knitr::kable(gene_TPM_treat, "html") %>%
   kableExtra::kable_styling(full_width = FALSE)
+
+gene_TPM_treat <- as.data.frame(gene_TPM_treat)
+col_names <- gene_TPM_treat[1, ]
+gene_TPM_treat <- gene_TPM_treat[-1, ]
+colnames(gene_TPM_treat) <- col_names
+gene_TPM_treat$information <- rownames(gene_TPM_treat)
+gene_TPM_treat <- gene_TPM_treat %>%
+  dplyr::select(information, everything())
+
+output_path <- "/ix/cigcore/proj/biswas/code/Sissi/BulkRNA-seq_human_Dana/lasso/TPM/Logistic/negModule(303gene)_TPM_16.xlsx"
+write.xlsx(gene_TPM_treat, file = output_path)
+```
+```{r}
+library(xfun)
+xfun::embed_files(c('./TPM/Logistic/negModule(303gene)_TPM_16.xlsx'))
 ```
 
 ## Heatmap (Pre-treatment vs Post-treatment)
@@ -778,7 +845,7 @@ zMatrix <- t(TPM_ordered_variance)
 gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
 gene_zMatrix <- as.data.frame(t(gene_zMatrix))
 df <- merge(as.data.frame(gene_zMatrix), as.data.frame(coldata), by = "row.names", all.x = TRUE)
-df <- df[, c(2,3,5)]
+df <- df[, c(2,3,4,6)]
 
 df2 <- df %>%
   pivot_longer(cols = -c(patient_id, treatment), names_to = "Gene", values_to = "logTPM") %>%
@@ -873,7 +940,7 @@ plot.roc(
   grid = TRUE,
   grid.lwd = 2,
   col = "royalblue",
-  main = paste("Nested-CV Final model\n Area under the curve (AUC):", round(auc, digits = 2))
+  main = paste("Nested-CV Final model (11 genes)\n Area under the curve (AUC):", round(auc, digits = 2))
 )
 
 ```
@@ -886,7 +953,7 @@ final_lasso_nested_cv[["summary"]][["metrics"]]
 ```
 
 
-## Final model (10 genes)
+## Final model (11 genes)
 
 ```{r}
 final_model_matrix <- as.data.frame(expression_matrix[, gene_final])
@@ -1030,14 +1097,14 @@ merge_coefficients$direction_match <- ifelse(sign(merge_coefficients$bayes) == s
 
 ```
 
-# Final genes list (Total 10 genes)
+# Final genes list (Total 11 genes)
 
 
 | Modules (size)       | Module correlation to treatment     | Genes selected by lasso |
 | ------------- |:-------------:| -----:|
 |  **lightgreen (152 genes)**      | Positive | 8 |
 |  **darkred (63 genes)**      | Negative      |   1 |
-| **midnightblue (303 genes)**      | Negative      |    1 |
+| **midnightblue (303 genes)**      | Negative      |    2 |
 
 ```{r}
 total_gene <- rbind(external_gene_names_positive, external_gene_names_negative_1, external_gene_names_negative_2)
@@ -1100,7 +1167,7 @@ zMatrix <- t(TPM_ordered_variance)
 gene_zMatrix <- zMatrix[rownames(zMatrix) %in% selected_genes, , drop = FALSE]
 gene_zMatrix <- as.data.frame(t(gene_zMatrix))
 df <- merge(as.data.frame(gene_zMatrix), as.data.frame(coldata), by = "row.names", all.x = TRUE)
-df <- df[, c(2,3,4,5,6,7,8,9,10,11,12,14)]
+df <- df[, c(2,3,4,5,6,7,8,9,10,11,12,13,15)]
 
 df2 <- df %>%
   pivot_longer(cols = -c(patient_id, treatment), names_to = "Gene", values_to = "logTPM") %>%

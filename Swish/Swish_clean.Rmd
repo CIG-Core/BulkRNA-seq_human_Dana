@@ -1,0 +1,99 @@
+---
+title: "Swich"
+author: 
+- name: "Computational Immunogenomics Core (CIG Core)"
+  affiliation: "Center for Systems Immunology, University of Pittsburgh"
+  email: "sis186@pitt.edu"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 3  # upto three depths of headings (specified by #, ## and ###)
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    number_sections: true  ## if you want number sections at each table header
+    theme: "default" # many options for theme, this one is my favorite.
+    highlight: tango  # specifies the syntax highlighting style
+---
+
+SWICH vignettes <https://bioconductor.org/packages/release/bioc/vignettes/fishpond/inst/doc/swish.html#The_Swish_method>
+
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+## Libraries
+library(tximeta)
+library(fishpond)
+library(tximport)
+library("bears")
+library(SummarizedExperiment)
+## Set paths
+proj_path <- "/ix/cigcore/proj/biswas"
+data_path <- file.path(proj_path, "data", "Ascherman_TotalRNA_07_20_2023")
+resPath <- gsub(pattern="data", replacement="result", data_path)
+experiment <- "5-2-Swich"
+experimentPath <- file.path(resPath, experiment)
+dir.create(experimentPath, showWarnings = TRUE, recursive = TRUE)
+```
+
+# Import metadata as coldata
+
+```{r count, include=FALSE, echo=FALSE}
+coldata <- read.csv(file.path(metadata_path), row.names = 1) #Metadata
+coldata$names <- rownames(coldata)
+rownames(coldata) <- NULL
+coldata <- coldata[,c(4,3,1)]
+coldata$treatment <- ifelse(coldata$treatment == "Pre", 0, 1)
+```
+
+# Incorprate kallisto pathway to coldata
+
+```{r}
+kallisto_path <- file.path(resPath, "mapped_kallisto_2")
+coldata$files <- file.path(kallisto_path, paste0(coldata$names, "_trimmomatic_paired_kallisto"), "abundance.h5")
+all(file.exists(coldata$files))
+```
+
+# Use trimport to read kallisto output 
+
+```{r}
+txi.kallisto <- tximport(coldata$files, type = "kallisto", txIn = TRUE, txOut = TRUE)
+```
+
+# Construct SummarizedExperiment
+
+## Method 1
+
+```{r}
+kallistodir <- file.path(resPath, "kallisto")
+se <- kallisto2se(
+  sample_info = coldata,
+  level = "transcript",
+  kallistodir = coldata$files,
+  tx2gene = NULL,
+  countsFromAbundance = "lengthScaledTPM"
+)
+
+tximport(kallistodir, type = "kallisto", txOut = TRUE)
+
+```
+
+## Method 2
+
+```{r}
+kallisto_se <- SummarizedExperiment(assays=list(counts=txi.kallisto$counts),
+                     colData=coldata)
+```
+
+# Swish
+
+```{r}
+y <- kallisto_se
+y <- scaleInfReps(y)
+y <- labelKeep(y)
+y <- y[mcols(y)$keep,]
+set.seed(1)
+y <- swish(y, x="condition", pair="line")
+```
+
